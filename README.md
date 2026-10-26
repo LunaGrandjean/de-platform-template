@@ -1,14 +1,14 @@
-# Albert's Marketplace
+# Albert's Marketplace data platform
 
-Albert's Marketplace is a fictional European online marketplace for beauty
-products. This repository is the company's own side of it: the operational
-PostgreSQL database, the storefront that writes to it, and the generators that
-give it three years of order history and a stream of live traffic.
+This is our group's data platform for Albert's Marketplace, a fictional European
+beauty-products marketplace used in the Data Engineering & Cloud Infrastructure
+course at Albert School. Steps 1 and 2 document the platform design and establish
+the raw Bronze layer in Google Cloud Storage.
 
-It is the source system for the Data Engineering & Cloud Infrastructure course
-at Albert School. You run it locally, and build your pipelines against it:
-extract from its database or its Kafka topic, and land the data wherever your
-platform lives.
+The repository also includes the provided marketplace source system: its
+operational PostgreSQL database, storefront and generators for historical data
+and live traffic. Those components support the later ingestion exercises. The
+course template supplies the group-repository structure and collaboration files.
 
 **Everything in it is made up.** Every customer, address, phone number,
 password and payment card is synthetic. Product and review text comes from a
@@ -212,6 +212,12 @@ rebuild the first sixty without calling the model:
 [docs/tickets-card.md](docs/tickets-card.md).
 
 ## Licence and attribution
+
+The course template files and structure remain the course author's intellectual
+property and are supplied for this course only. No licence is granted for those
+template materials; the group's work belongs to the group, as stated in the
+original template README. The source-system licences and attributions below
+apply to the imported marketplace code and dataset.
 
 - **Code: MIT** ([LICENSE](LICENSE)).
 - **Data: CC BY-SA 4.0.** It is derived from:

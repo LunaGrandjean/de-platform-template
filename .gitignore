@@ -7,15 +7,36 @@ data/
 .env
 .env.*
 !.env.example
+*-key.json
+*credentials*.json
+service-account*.json
 
 # Personal Claude Code settings (machine-specific paths)
 .claude/settings.local.json
 
 # Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
 venv/
 
+# dbt
+dbt/target/
+dbt/dbt_packages/
+dbt/logs/
+
+# Terraform (keep .terraform.lock.hcl in Git)
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!*.tfvars.example
+
+# Airflow
+orchestration/logs/
+
 # OS
 .DS_Store
+Thumbs.db
+.idea/
