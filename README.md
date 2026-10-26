@@ -26,9 +26,12 @@ events. The platform targets daily units sold by product and country.
 | Member | GitHub handle | Contribution |
 |---|---|---|
 | Luna Grandjean | [@LunaGrandjean](https://github.com/LunaGrandjean) | Initial platform design and documentation |
+| Omar Abdellatif | [@abdellatifomar61-ship-it](https://github.com/abdellatifomar61-ship-it) | To be documented |
+| Malek Saoudi | [@Msaoudi115](https://github.com/Msaoudi115) | To be documented |
+| Anas Mossad | [@realay04](https://github.com/realay04) | To be documented |
 
-The remaining group members, cohort and group identifier have not been
-provided yet. Add them before submitting the group repository.
+The cohort and group identifier have not been provided yet. Add them before
+submitting the group repository.
 
 ### Step 1: Start the Platform
 
@@ -48,7 +51,8 @@ Step 1 completion checklist:
 - [x] Compare four architecture options and record the target decision.
 - [x] Add an architecture diagram and layer contracts.
 - [x] Sketch the daily-demand star schema.
-- [ ] Complete the team table, cohort and group identifier.
+- [x] Complete the team table with all members and GitHub handles.
+- [ ] Add the cohort and group identifier.
 - [ ] Verify a private group repository named `de-<cohort>-<group>` was created
   from `de-platform-template`. This checkout's remote currently points to the
   public source-system repository; a personal branch alone does not meet this
