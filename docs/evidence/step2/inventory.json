@@ -1,0 +1,149 @@
+{
+  "bucket": "data-engineering-i1-marketplace-group",
+  "objects": [
+    {
+      "bytes": 9208,
+      "generation": 1793011973095683,
+      "md5": "STiqKIMLoX25jMhxI5aPNQ==",
+      "name": "bronze/_manifests/20261026T105159Z-2efcb86a.json",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 4011871,
+      "generation": 1793011969717828,
+      "md5": "u263rbj8KE7dkZXkpFc/uw==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 4012103,
+      "generation": 1793011970087388,
+      "md5": "sFyg02+ry2dt9U2b8gkIWw==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1814,
+      "generation": 1793011970264641,
+      "md5": "Jr9COo1v2OVMOBwCx0k8mQ==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1164406,
+      "generation": 1793011966102714,
+      "md5": "5wS4cFnDTzlO9JWeMWtTRA==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1173067,
+      "generation": 1793011966363347,
+      "md5": "hH8aVdGmZ1d90rwWJzPV6Q==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1158108,
+      "generation": 1793011966696985,
+      "md5": "FT8Z9K3qmS7wsanqiZSQMA==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1156669,
+      "generation": 1793011966939039,
+      "md5": "CeFqsF6pzTGTGefEfoqN5Q==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00003.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 140117,
+      "generation": 1793011967148411,
+      "md5": "tpXVQjlGSp4MZYQS/BCBHQ==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00004.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 4680113,
+      "generation": 1793011965096829,
+      "md5": "Wf2DR4dTZ4g+9B1L3cBH6Q==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 4683583,
+      "generation": 1793011965521617,
+      "md5": "Wzwbmfry9r3iloZ4urquuw==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1121409,
+      "generation": 1793011965854978,
+      "md5": "mo0yeBSJDAMTICVLCvByAA==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 7268120,
+      "generation": 1793011969329025,
+      "md5": "q5pUMipdInKbE9BDNM3QDQ==",
+      "name": "bronze/snapshot/product/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1852959,
+      "generation": 1793011968595571,
+      "md5": "se45XXdUliXOEHDZuYFm+A==",
+      "name": "bronze/snapshot/product_reviews/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 205864,
+      "generation": 1793011968816604,
+      "md5": "Oybhs+ZLr5HTZSS3WkB1Og==",
+      "name": "bronze/snapshot/product_reviews/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 16583867,
+      "generation": 1793011967985447,
+      "md5": "4DBz2fPt6FaWX4qh+BEblQ==",
+      "name": "bronze/snapshot/review/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 1659262,
+      "generation": 1793011968318201,
+      "md5": "bhlUGJ4lBmySkJeCKWaMQw==",
+      "name": "bronze/snapshot/review/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 5038718,
+      "generation": 1793011970670724,
+      "md5": "Rs1m2v/7Rbx5BGJzYNCc3w==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 5034335,
+      "generation": 1793011972659577,
+      "md5": "Qrl0tOT93rFKSiyq6o7C4Q==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "storage_class": "STANDARD"
+    },
+    {
+      "bytes": 2880,
+      "generation": 1793011972856018,
+      "md5": "g+o5sv0gDDKBsw1X9UC88Q==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "storage_class": "STANDARD"
+    }
+  ],
+  "prefix": "bronze/",
+  "total_bytes": 60958473,
+  "total_objects": 20,
+  "verified_at_utc": "2026-10-26T11:01:39.393237+00:00"
+}

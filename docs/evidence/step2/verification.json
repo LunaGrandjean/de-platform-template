@@ -1,0 +1,7 @@
+{
+  "bucket": "data-engineering-i1-marketplace-group",
+  "method": "Google Cloud Storage Python SDK: buckets.get and buckets.getIamPolicy",
+  "project": "data-engineering-i1",
+  "scope": "Bucket policy only; inherited project/org grants are not enumerated here.",
+  "verified_at_utc": "2026-10-26T11:01:39.320720+00:00"
+}

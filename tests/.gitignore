@@ -1,0 +1,11 @@
+# What the runs leave behind
+*.log
+*.txt
+*.json
+crlf/
+empty_csv/
+geonames/
+csvcheck/
+release2/
+noseed/
+legacy_*.sql

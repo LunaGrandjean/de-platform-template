@@ -1,4 +1,9 @@
-# Secrets: never commit these
+# Generated data and release assets never go in git
+data/
+*.parquet
+*.dump
+
+# Secrets
 .env
 .env.*
 !.env.example
@@ -6,9 +11,8 @@
 *credentials*.json
 service-account*.json
 
-# Local data
-data/
-*.parquet
+# Personal Claude Code settings (machine-specific paths)
+.claude/settings.local.json
 
 # Python
 __pycache__/
@@ -21,7 +25,7 @@ dbt/target/
 dbt/dbt_packages/
 dbt/logs/
 
-# Terraform (the .terraform.lock.hcl file is committed on purpose)
+# Terraform (keep .terraform.lock.hcl in Git)
 .terraform/
 *.tfstate
 *.tfstate.*
@@ -32,7 +36,7 @@ crash.log
 # Airflow
 orchestration/logs/
 
-# Editors and OS
-.idea/
+# OS
 .DS_Store
 Thumbs.db
+.idea/

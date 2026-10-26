@@ -1,81 +1,236 @@
-# Albert's Marketplace data platform: group repo
+# Albert's Marketplace data platform
 
-This repository is your group's data platform for **Albert's Marketplace**, the
-fictional European beauty marketplace of the Data Engineering & Cloud
-Infrastructure course (MSA-DAT09-02, Albert School).
+This is our group's data platform for Albert's Marketplace, a fictional European
+beauty-products marketplace used in the Data Engineering & Cloud Infrastructure
+course at Albert School. Steps 1 and 2 document the platform design and establish
+the raw Bronze layer in Google Cloud Storage.
 
-It starts almost empty. Every lesson adds a layer on top of the previous one. By
-the end of the course it holds the platform your group defends orally:
-- ingestion
-- a bronze, silver and gold warehouse
-- containerised jobs and orchestration
-- infrastructure as code
-- cost controls and a security baseline
+The repository also includes the provided marketplace source system: its
+operational PostgreSQL database, storefront and generators for historical data
+and live traffic. Those components support the later ingestion exercises. The
+course template supplies the group-repository structure and collaboration files.
 
-## Team
+**Everything in it is made up.** Every customer, address, phone number,
+password and payment card is synthetic. Product and review text comes from a
+public research dataset, and images are URLs into someone else's host, never
+copies. See [`docs/dataset-card.md`](docs/dataset-card.md).
 
-| Name | GitHub | Role |
+## Student data platform
+
+The course platform documentation is developed on branch `Luna`. The source
+system below provides its PostgreSQL data, released CSV extracts and Kafka
+events. The platform targets daily units sold by product and country.
+
+### Team
+
+| Member | GitHub handle | Contribution |
 |---|---|---|
-| | | |
-| | | |
-| | | |
-| | | |
+| Luna Grandjean | [@LunaGrandjean](https://github.com/LunaGrandjean) | Initial platform design and documentation |
+| Omar Abdellatif | [@abdellatifomar61-ship-it](https://github.com/abdellatifomar61-ship-it) | To be documented |
+| Malek Saoudi | [@Msaoudi115](https://github.com/Msaoudi115) | To be documented |
+| Anas Mossad | [@realay04](https://github.com/realay04) | To be documented |
 
-## How this repo grows
+The cohort and group identifier have not been provided yet. Add them before
+submitting the group repository.
 
-| Lesson | What your group adds | Where |
-|---|---|---|
-| L01 · Architecture decision frame | Data-flow matrix, first ADR, architecture diagram v1, star schema sketch | `docs/` |
-| L02 · Object storage foundations | Bronze layer on Cloud Storage, data dictionary v1 | `docs/` |
-| L03 · Batch, streaming, CDC | Ingestion pipelines | `ingestion/` |
-| L04 · SQL warehouses | Warehouse tables, three costed queries | `docs/` |
-| L05 · dbt and the medallion pattern | Silver and gold models, tests | `dbt/` |
-| L06 · Packaging data jobs | Dockerfiles for the ingestion job and dbt | `ingestion/`, `dbt/` |
-| L07 · Airflow | A scheduled DAG | `orchestration/` |
-| L08 · Terraform | The platform as code, `terraform plan` in CI | `infra/`, `.github/workflows/` |
-| L09 · FinOps | Labels, a budget alert, one measured optimisation | `infra/`, `docs/` |
-| L10 · Security and governance | Least-privilege access, PII redaction, data classification | `infra/`, `dbt/`, `docs/` |
+### Step 1: Start the Platform
 
-Starter files for later lessons arrive as **pull requests** opened by the
-teaching team. Review and merge them like any other change.
+| Deliverable | Content |
+|---|---|
+| [Data flows](docs/data-flows.md) | Sources, consumers, frequencies, formats and three risk questions |
+| [Target architecture ADR](docs/adr/0001-target-architecture.md) | Comparison of warehouse, lake, two-tier and lakehouse architectures |
+| [Architecture](docs/architecture.md) | Context diagram, current status and Bronze/Silver/Gold guarantees |
+| [Daily-demand star](docs/model/star-daily-demand.md) | Business process, grain, dimensions and measures |
 
-## How we work
+The Step 1 architecture is a design; subsequent deployment status is tracked
+in the architecture document and the step checklists below.
 
-- **Every change goes through a pull request,** reviewed by another member
-  before it reaches `main`.
-- **One decision, one ADR** in `docs/adr/`. Every member writes at least one. At
-  the oral defence, each of you defends a technical choice unprepared.
-- **The commit history is graded.** Commit in small steps, with messages that
-  say why.
-- **Never commit secrets:** no `.env` files, no service-account keys.
-  `.gitignore` blocks the usual names; it cannot catch everything.
-- **Keep `docs/architecture.md` current.** It is the diagram you present at the
-  defence.
+Step 1 completion checklist:
 
-## Layout
+- [x] Document the source flows and their risks.
+- [x] Compare four architecture options and record the target decision.
+- [x] Add an architecture diagram and layer contracts.
+- [x] Sketch the daily-demand star schema.
+- [x] Complete the team table with all members and GitHub handles.
+- [ ] Add the cohort and group identifier.
+- [ ] Verify a private group repository named `de-<cohort>-<group>` was created
+  from `de-platform-template`. Verify its privacy, name and template origin;
+  a personal branch alone does not meet this course requirement.
+- [ ] Add every member and `Charlestng` as collaborators and verify that all
+  invitations are accepted.
+- [ ] Email the private repository URL and group names to
+  `charlestanguypro@gmail.com`, with subject
+  `MSA-DAT09-02 | L01-REPO | <cohort> | <group>`.
+- [ ] Have every member push at least one commit.
+- [ ] Merge at least one pull request after another member reviews it.
+
+Keep the course repository and its access intact until marks are published.
+Submit changes through reviewed pull requests. Commit history is part of the
+assessment. Keep a separate commit for each project step.
+
+### Step 2: The Bronze Layer
+
+The shared bucket is `gs://data-engineering-i1-marketplace-group`, in project
+`data-engineering-i1`, region `europe-west1`. The initial snapshot contains
+seven tables, 1,296,708 raw rows and 19 Snappy Parquet files, partitioned by
+ingestion date and unique load ID. No source columns or parsed values were
+cleaned, deduplicated or dropped.
+
+| Deliverable | Content |
+|---|---|
+| [Setup and verification](docs/bronze-setup.md) | Reproducible uv commands, actual load and remaining group checks |
+| [Bronze layout ADR](docs/adr/0002-bronze-layout.md) | Partition/format/codec decisions and measured evidence |
+| [Data dictionary](docs/data-dictionary.md) | All 39 source columns, source and physical types, personal-data flags |
+| [Applied lifecycle](infra/lifecycle.json) | Live non-deleting storage-class transitions at 30, 90 and 365 days |
+| [Actual IAM](infra/iam.md) | Verified bucket bindings and effective-access limitations |
+| [Cost baseline](docs/costs.md) | Dated published prices, measured volumes and a 100x scenario |
+| [Architecture](docs/architecture.md) | Actual bucket, region, layout and planned readers |
+
+Cloud operations run through `uv` and the Python SDK using local Application
+Default Credentials; no administrator installation or `gcloud` is required.
+Generated CSV/Parquet data and credentials are excluded from Git. The committed
+[evidence](docs/evidence/step2/) contains metadata, counts and checksums only.
+
+Group-member Google access still needs individual verification. Steps 3 and 4
+will add automated ingestion and the warehouse.
+
+## Start it
+
+You need Docker Desktop (or Docker Engine with Compose v2), about 6 GB of free
+disk and 3 GB of free RAM.
 
 ```
-docs/
-  architecture.md    target architecture and medallion layers
-  data-flows.md      data-flow matrix
-  adr/               architecture decision records
-  model/             dimensional model sketches
-ingestion/           from L03
-dbt/                 from L05
-orchestration/       from L07
-infra/               from L08
+git clone https://github.com/TangoAI-AlbertSchool-Data-Eng-Cloud/albert-marketplace.git
+cd albert-marketplace
+docker compose up
 ```
 
-## Data
+The first start downloads the dataset (a 66 MB database dump, published as a
+release asset) and restores it, which takes a minute or two. Later starts find
+the data already there and skip it. Then:
 
-The source system is Albert's Marketplace's company repo (link on the course
-site). Its data is synthetic or derived from public datasets; its licence and
-attribution are stated there.
+| What | Where | |
+|---|---|---|
+| Storefront (the shop) | http://localhost:8510 | Streamlit |
+| Storefront API | http://localhost:8100/docs | FastAPI, [endpoints](storefront/README.md) |
+| PostgreSQL | `localhost:5432` | database `marketplace`, user `postgres`, password `postgres` |
+| Kafka | `localhost:9092` | topic `clickstream` |
 
-## Ownership
+The load generator starts with everything else: it shops through the API on a
+simulated clock, so orders, payments and shipments keep arriving in the
+database, and clickstream events keep arriving on the Kafka topic.
 
-**No licence is granted for this repository.**
-- **The template:** this README, the `docs/` templates and the folder structure
-  remain the course author's intellectual property. Do not reuse them outside
-  the course.
-- **Your work:** what your group writes here belongs to your group.
+Stop it with `Ctrl+C`, and `docker compose down` to remove the containers. The
+data lives in a Docker volume and survives both; `docker compose down -v`
+deletes it, and the next start downloads the dataset again.
+
+## Connect to it
+
+From your machine:
+
+```
+psql postgresql://postgres:postgres@localhost:5432/marketplace
+```
+
+From another container on your machine (Airbyte, Airflow, dbt), the database is
+`host.docker.internal:5432` and Kafka is `host.docker.internal:29092`.
+
+PostgreSQL runs with `wal_level=logical`, so change data capture works: create a
+replication slot, or point Airbyte or Debezium at it. A forgotten slot is
+dropped once it holds back 512 MB of write-ahead log, so it cannot fill your
+disk.
+
+## What is in here
+
+| | |
+|---|---|
+| [`db/`](db/) | The schema, as dbmate migrations, and `load_legacy.sql`, which loads the original CSV extract with its defects |
+| [`storefront/`](storefront/) | FastAPI backend and Streamlit shop ([README](storefront/README.md)) |
+| [`generators/`](generators/) | `history/` builds the order history; `live/traffic.py` is the load generator |
+| [`tests/`](tests/) | The checks behind the build spec's verified claims |
+| [`docs/`](docs/) | [Dataset card](docs/dataset-card.md), [build spec](docs/build-spec.md), and `critique/`: original files the course picks apart |
+| `data/` | Downloads and generated files. Never in git |
+
+The schema is the contract between all of it: 25 tables from the original
+extract, plus `ORDER_ITEMS` (order lines) and `PAYMENT` (one transaction per
+order).
+
+## Settings
+
+Every setting has a default, so `docker compose up` needs no `.env`. Override
+any of them in the environment or in a `.env` file next to `compose.yaml`.
+
+| Variable | Default | |
+|---|---|---|
+| `DB_PORT`, `API_PORT`, `UI_PORT` | 5432, 8100, 8510 | host ports, if one is taken |
+| `KAFKA_PORT`, `KAFKA_DOCKER_PORT` | 9092, 29092 | from your machine, from another container |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | postgres, postgres, marketplace | |
+| `SEED_URL` | the release asset | set it empty to start on an empty database |
+| `CLOCK_ACCELERATION` | 15 | how much faster than real time the live traffic runs |
+| `ORDERS_PER_DAY` | 200 | orders per simulated day |
+| `TRAFFIC_SEED` | 20260915 | the load generator's seed |
+| `SIMULATION` | true | lets the load generator date orders on its own clock. Off, the storefront uses the real time |
+
+To run without the live traffic:
+`docker compose up db seed migrate storefront-api storefront-ui`.
+
+## Rebuild the dataset
+
+You do not need this to follow the course: the release asset is the dataset.
+It is here because the course reads it.
+
+The `build` profile holds the services that make the data. They need the
+original CSV extract in `LEGACY_CSV_DIR` and, for the calibration, Online
+Retail II in `RETAIL_XLSX_DIR`.
+
+```
+docker compose --profile build run --rm load-legacy        # CSVs -> database
+docker compose --profile build run --rm calibrate          # -> history/calibration.json
+docker compose --profile build run --rm fetch-places       # GeoNames -> history/places.json
+docker compose --profile build run --rm generate-history --seed 7 --end-date 2026-09-15
+docker compose --profile build run --rm release            # -> data/release/
+```
+
+`--scale` changes how many orders those three years hold, without touching the
+customers or the catalogue: `--scale 0.1` for a tenth of them (a small copy for
+a laptop or for CI), `--scale 5` for five times as many. Every rule the full
+dataset follows still holds, duplicates included.
+
+The history generator is deterministic: the same seed, end date and scale give
+the same database every time. Tear these down with
+`docker compose --profile build down`; a plain `down` leaves their containers
+behind.
+
+## Support tickets
+
+120 messages to the company's support inbox, each labelled with the team that
+should handle it, for the LLM course. They are a separate release,
+[`tickets-v1.0.0`](https://github.com/TangoAI-AlbertSchool-Data-Eng-Cloud/albert-marketplace/releases/tag/tickets-v1.0.0):
+download `tickets_v1.csv`. A language model wrote the wording from real rows of
+the dataset; a person checked every label. How they were made, and how to
+rebuild the first sixty without calling the model:
+[docs/tickets-card.md](docs/tickets-card.md).
+
+## Licence and attribution
+
+The course template files and structure remain the course author's intellectual
+property and are supplied for this course only. No licence is granted for those
+template materials; the group's work belongs to the group, as stated in the
+original template README. The source-system licences and attributions below
+apply to the imported marketplace code and dataset.
+
+- **Code: MIT** ([LICENSE](LICENSE)).
+- **Data: CC BY-SA 4.0.** It is derived from:
+  - McAuley Lab's Amazon Reviews'23: Hou, Y., Li, J., He, Z., Yan, A., Chen, X.,
+    McAuley, J. (2024). *Bridging Language and Items for Retrieval and
+    Recommendation.* arXiv:2403.03952
+  - UCI Online Retail II, used for calibration only: Chen, D. (2012). *Online
+    Retail II* [Dataset]. UCI Machine Learning Repository.
+    https://doi.org/10.24432/C5CG6D. CC BY 4.0
+  - GeoNames postal codes (https://www.geonames.org/), CC BY 4.0, for addresses
+  - Eurostat population figures, for the country and region mix
+
+The storefront and the original schema began as
+[amazon-database-design](https://github.com/JedhaBootcamp/amazon-database-design)
+and
+[amazon-mockup-e-commerce](https://github.com/JedhaBootcamp/amazon-mockup-e-commerce).

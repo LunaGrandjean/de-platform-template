@@ -1,0 +1,342 @@
+# Albert's Marketplace: the company's side of the course.
+# `docker compose up` starts PostgreSQL and applies db/migrations.
+# Every value below has a local default; override any of them in the environment.
+name: albert-marketplace
+
+services:
+  db:
+    image: postgres:17.11
+    # Logical decoding, so the students' change data capture (Airbyte, Debezium)
+    # can read changes from a replication slot. max_slot_wal_keep_size stops a
+    # forgotten slot from filling a laptop's disk: PostgreSQL drops the slot instead.
+    command: ["postgres", "-c", "wal_level=logical", "-c", "max_slot_wal_keep_size=512MB"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-marketplace}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      # -h localhost checks over TCP: while the image initialises a new volume,
+      # PostgreSQL answers on its socket before it accepts TCP connections.
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The dataset ships as a GitHub release asset, not in git. On a first start
+  # these two fetch it and restore it, before the migrations run; afterwards
+  # they find the schema already there and do nothing. To start on an empty
+  # database instead, run with SEED_URL= (empty).
+  seed-fetch:
+    image: curlimages/curl:8.19.0
+    user: root
+    environment:
+      SEED_URL: ${SEED_URL-https://github.com/TangoAI-AlbertSchool-Data-Eng-Cloud/albert-marketplace/releases/download/${DATASET_VERSION:-v1.0.0}/marketplace.dump}
+    volumes:
+      - seed_data:/seed
+      - ${RELEASE_DIR:-./data/release}:/local:ro
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        if [ -f /local/marketplace.dump ]; then
+          echo "Using the dump built here: $${RELEASE_DIR:-./data/release}/marketplace.dump"
+        elif [ -f /seed/marketplace.dump ]; then
+          echo "The dataset is already downloaded."
+        elif [ -z "$$SEED_URL" ]; then
+          echo "SEED_URL is empty: starting on an empty database."
+        else
+          echo "Downloading the dataset from $$SEED_URL"
+          if curl --fail --location --retry 3 --progress-bar --output /seed/marketplace.dump.part "$$SEED_URL"; then
+            mv /seed/marketplace.dump.part /seed/marketplace.dump
+          else
+            rm -f /seed/marketplace.dump.part
+            echo "WARNING: the download failed. The database will start EMPTY, with"
+            echo "the schema the migrations create and no data. Once the network is"
+            echo "back, run: docker compose up --force-recreate seed-fetch seed"
+          fi
+        fi
+
+  seed:
+    image: postgres:17.11
+    entrypoint: ["bash", "/seed.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-marketplace}
+      # sha256 from the release's CHECKSUMS; checked when set
+      SEED_SHA256: ${SEED_SHA256:-}
+    volumes:
+      - ./db/release/seed.sh:/seed.sh:ro
+      - seed_data:/seed
+      - ${RELEASE_DIR:-./data/release}:/local:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      seed-fetch:
+        condition: service_completed_successfully
+
+  migrate:
+    image: ghcr.io/amacneil/dbmate:2.35.1
+    command: ["--wait", "up"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketplace}?sslmode=disable
+      DBMATE_MIGRATIONS_DIR: /db/migrations
+      DBMATE_NO_DUMP_SCHEMA: "true"
+    volumes:
+      - ./db/migrations:/db/migrations:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+  # Storefront API: http://localhost:8100/docs (API_PORT changes the host port)
+  storefront-api:
+    build:
+      context: ./storefront
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-marketplace}
+      # Lets the load generator use its simulated clock and the warehouse endpoint
+      SIMULATION: "${SIMULATION:-true}"
+    ports:
+      - "${API_PORT:-8100}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Storefront UI: http://localhost:8510 (UI_PORT changes the host port)
+  storefront-ui:
+    build:
+      context: ./storefront
+      dockerfile: Dockerfile-streamlit
+    environment:
+      API_URL: http://storefront-api:8000
+    ports:
+      - "${UI_PORT:-8510}:8501"
+    depends_on:
+      storefront-api:
+        condition: service_healthy
+
+  # Kafka: one KRaft broker (docs/build-spec.md §5.5). Clients connect to
+  #   kafka:9092                   from the services in this file
+  #   localhost:9092               from the host (KAFKA_PORT)
+  #   host.docker.internal:29092   from other Docker setups, such as Airbyte or Airflow (KAFKA_DOCKER_PORT)
+  kafka:
+    image: apache/kafka:4.3.1
+    ports:
+      - "${KAFKA_PORT:-9092}:19092"
+      - "${KAFKA_DOCKER_PORT:-29092}:29092"
+    environment:
+      # Fixed, so the data volume keeps working across restarts
+      CLUSTER_ID: fvSouG5VTYia_jEQdPlrtQ
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,HOST://:19092,DOCKER://:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,HOST://localhost:${KAFKA_PORT:-9092},DOCKER://host.docker.internal:${KAFKA_DOCKER_PORT:-29092}
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,HOST:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_NUM_PARTITIONS: 3
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # A week of events, and at most 256 MB per partition
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_LOG_RETENTION_BYTES: 268435456
+      # Small heap: students' laptops also run Airbyte and Airflow
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx256m
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "9092"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Creates the clickstream topic, then exits
+  kafka-init:
+    image: apache/kafka:4.3.1
+    command: ["/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "kafka:9092", "--create", "--if-not-exists",
+              "--topic", "clickstream", "--partitions", "3", "--replication-factor", "1"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # Live traffic: shopping sessions through the storefront API and clickstream
+  # events to Kafka, on a simulated clock (docs/build-spec.md §5.5, §9.17)
+  load-generator:
+    build:
+      context: ./generators
+    environment:
+      API_URL: http://storefront-api:8000
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: clickstream
+      CLOCK_ACCELERATION: ${CLOCK_ACCELERATION:-15}
+      ORDERS_PER_DAY: ${ORDERS_PER_DAY:-200}
+      TRAFFIC_SEED: ${TRAFFIC_SEED:-20260915}
+      # Read only: where the data ends, buyers and products
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-marketplace}
+    restart: unless-stopped
+    depends_on:
+      storefront-api:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+
+  # Build time only, to rebuild the dataset from the legacy CSV extract:
+  #   docker compose --profile build run --rm load-legacy
+  # LEGACY_CSV_DIR is the folder holding the 25 CSVs (default ./data/legacy_csv).
+  load-legacy:
+    image: postgres:17.11
+    profiles: ["build"]
+    entrypoint: ["psql", "--no-psqlrc", "--file", "/load/load_legacy.sql"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-marketplace}
+    volumes:
+      - ./db/load_legacy.sql:/load/load_legacy.sql:ro
+      - ${LEGACY_CSV_DIR:-./data/legacy_csv}:/csv:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  # Build time only, to recompute generators/history/calibration.json:
+  #   docker compose --profile build run --rm calibrate
+  # RETAIL_XLSX_DIR is the folder holding online_retail_II.xlsx
+  # (default ./data/online_retail_II).
+  calibrate:
+    image: ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim
+    profiles: ["build"]
+    working_dir: /generators
+    command: ["uv", "run", "--frozen", "python", "history/calibrate.py", "/retail/online_retail_II.xlsx", "history/calibration.json"]
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /opt/uv-cache
+      UV_LINK_MODE: copy
+      UV_PYTHON_DOWNLOADS: never
+    volumes:
+      - ./generators:/generators
+      - ${RETAIL_XLSX_DIR:-./data/online_retail_II}:/retail:ro
+      - uv_cache:/opt/uv-cache
+
+  # Build time only, to refresh generators/history/places.json from GeoNames:
+  #   docker compose --profile build run --rm fetch-places
+  fetch-places:
+    image: ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim
+    profiles: ["build"]
+    working_dir: /generators
+    command: ["uv", "run", "--frozen", "python", "history/places.py"]
+    environment:
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /opt/uv-cache
+      UV_LINK_MODE: copy
+      UV_PYTHON_DOWNLOADS: never
+    volumes:
+      - ./generators:/generators
+      - uv_cache:/opt/uv-cache
+
+  # Build time only: reloads the legacy CSVs, then generates the order history.
+  #   docker compose --profile build run --rm generate-history [--seed N] [--end-date YYYY-MM-DD] [--scale F]
+  # --scale changes how many orders the three years hold (0.1 for a tenth,
+  # 5 for five times as many); customers and the catalogue do not move.
+  # Needs LEGACY_CSV_DIR, as load-legacy does. Tear down with
+  # `docker compose --profile build down`: a plain `down` leaves the load-legacy
+  # container behind, and the next run fails on its deleted network.
+  generate-history:
+    image: ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim
+    profiles: ["build"]
+    working_dir: /generators
+    entrypoint: ["uv", "run", "--frozen", "python", "history/generate.py"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-marketplace}
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /opt/uv-cache
+      UV_LINK_MODE: copy
+      UV_PYTHON_DOWNLOADS: never
+    volumes:
+      - ./generators:/generators
+      - uv_cache:/opt/uv-cache
+    depends_on:
+      load-legacy:
+        condition: service_completed_successfully
+
+  # Build time only: support tickets for the LLM course, written from the
+  # released dataset. `plan` is deterministic; `write` calls the Anthropic API
+  # once per uncached ticket and needs ANTHROPIC_API_KEY in the environment.
+  #   docker compose --profile build run --rm tickets plan
+  #   docker compose --profile build run --rm tickets write
+  # The `outliers` batch (--batch outliers) also needs its briefs, which are
+  # staff-only and not in this repository: set OUTLIER_BRIEFS_DIR to their folder.
+  tickets:
+    image: ghcr.io/astral-sh/uv:0.9.30-python3.12-bookworm-slim
+    profiles: ["build"]
+    working_dir: /generators
+    entrypoint: ["uv", "run", "--frozen", "--group", "tickets", "python", "tickets/tickets.py"]
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PYTHONIOENCODING: utf-8
+      UV_PROJECT_ENVIRONMENT: /opt/venv
+      UV_CACHE_DIR: /opt/uv-cache
+      UV_LINK_MODE: copy
+      UV_PYTHON_DOWNLOADS: never
+    volumes:
+      - ./generators:/generators
+      - ./data:/data
+      - ${OUTLIER_BRIEFS_DIR:-./data/briefs}:/briefs:ro
+      - uv_cache:/opt/uv-cache
+
+  # Build time only, to package the release assets from the seeded database:
+  #   docker compose --profile build run --rm release
+  # Writes into RELEASE_DIR (default ./data/release); DATASET_VERSION,
+  # DATASET_SEED, DATASET_END_DATE and DATASET_SCALE go into MANIFEST.json.
+  # A scaled copy is its own release: build it with the matching RELEASE_DIR,
+  # DATASET_VERSION and DATASET_SCALE.
+  release:
+    image: postgres:17.11
+    profiles: ["build"]
+    entrypoint: ["bash", "/release/build.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      PGDATABASE: ${POSTGRES_DB:-marketplace}
+      DATASET_VERSION: ${DATASET_VERSION:-v1.0.0}
+      DATASET_SEED: ${DATASET_SEED:-7}
+      DATASET_END_DATE: ${DATASET_END_DATE:-2026-09-15}
+      DATASET_SCALE: ${DATASET_SCALE:-1.0}
+    volumes:
+      - ./db/release:/release:ro
+      - ./docs/dataset-card.md:/card/dataset-card.md:ro
+      - ./generators/history/calibration.json:/calibration/calibration.json:ro
+      - ${RELEASE_DIR:-./data/release}:/out
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:
+  kafka_data:
+  seed_data:
+  uv_cache:

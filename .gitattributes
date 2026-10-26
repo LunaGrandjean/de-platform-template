@@ -1,9 +1,18 @@
-# Normalise line endings, so scripts and Dockerfiles behave the same on
-# Windows, macOS and Linux.
-* text=auto eol=lf
-*.bat text eol=crlf
-*.ps1 text eol=crlf
+# Normalise text across Windows, macOS and Linux.
+*                       text=auto eol=lf
+*.bat                   text eol=crlf
+*.ps1                   text eol=crlf
+*.png                   binary
+*.jpg                   binary
+*.pdf                   binary
 
-*.png binary
-*.jpg binary
-*.pdf binary
+# Generated and locked files keep Unix line endings in every checkout, so a
+# checksum taken on Windows matches the one written in a container.
+uv.lock                 text eol=lf
+generators/**/*.json    text eol=lf
+
+# Shell scripts are mounted into Linux containers: CRLF would break the shebang.
+*.sh                    text eol=lf
+
+# compose.yaml carries a shell script inline, for the same reason.
+compose.yaml            text eol=lf
