@@ -42,8 +42,8 @@ submitting the group repository.
 | [Architecture](docs/architecture.md) | Context diagram, current status and Bronze/Silver/Gold guarantees |
 | [Daily-demand star](docs/model/star-daily-demand.md) | Business process, grain, dimensions and measures |
 
-The architecture is a design at this stage; cloud resources and pipelines have
-not been verified or deployed as part of Step 1.
+The Step 1 architecture is a design; subsequent deployment status is tracked
+in the architecture document and the step checklists below.
 
 Step 1 completion checklist:
 
@@ -54,9 +54,8 @@ Step 1 completion checklist:
 - [x] Complete the team table with all members and GitHub handles.
 - [ ] Add the cohort and group identifier.
 - [ ] Verify a private group repository named `de-<cohort>-<group>` was created
-  from `de-platform-template`. This checkout's remote currently points to the
-  public source-system repository; a personal branch alone does not meet this
-  course requirement.
+  from `de-platform-template`. Verify its privacy, name and template origin;
+  a personal branch alone does not meet this course requirement.
 - [ ] Add every member and `Charlestng` as collaborators and verify that all
   invitations are accepted.
 - [ ] Email the private repository URL and group names to
@@ -67,8 +66,33 @@ Step 1 completion checklist:
 
 Keep the course repository and its access intact until marks are published.
 Submit changes through reviewed pull requests. Commit history is part of the
-assessment. Steps 2, 3 and 4 will add Bronze storage, automated ingestion and
-the warehouse, with a separate commit for each step.
+assessment. Keep a separate commit for each project step.
+
+### Step 2: The Bronze Layer
+
+The shared bucket is `gs://data-engineering-i1-marketplace-group`, in project
+`data-engineering-i1`, region `europe-west1`. The initial snapshot contains
+seven tables, 1,296,708 raw rows and 19 Snappy Parquet files, partitioned by
+ingestion date and unique load ID. No source columns or parsed values were
+cleaned, deduplicated or dropped.
+
+| Deliverable | Content |
+|---|---|
+| [Setup and verification](docs/bronze-setup.md) | Reproducible uv commands, actual load and remaining group checks |
+| [Bronze layout ADR](docs/adr/0002-bronze-layout.md) | Partition/format/codec decisions and measured evidence |
+| [Data dictionary](docs/data-dictionary.md) | All 39 source columns, source and physical types, personal-data flags |
+| [Applied lifecycle](infra/lifecycle.json) | Live non-deleting storage-class transitions at 30, 90 and 365 days |
+| [Actual IAM](infra/iam.md) | Verified bucket bindings and effective-access limitations |
+| [Cost baseline](docs/costs.md) | Dated published prices, measured volumes and a 100x scenario |
+| [Architecture](docs/architecture.md) | Actual bucket, region, layout and planned readers |
+
+Cloud operations run through `uv` and the Python SDK using local Application
+Default Credentials; no administrator installation or `gcloud` is required.
+Generated CSV/Parquet data and credentials are excluded from Git. The committed
+[evidence](docs/evidence/step2/) contains metadata, counts and checksums only.
+
+Group-member Google access still needs individual verification. Steps 3 and 4
+will add automated ingestion and the warehouse.
 
 ## Start it
 

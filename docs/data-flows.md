@@ -7,9 +7,9 @@ database stores customers, orders, order lines, reviews and shipping details.
 The student platform will isolate analytical reads from customer-serving
 systems and publish daily demand by product and country.
 
-The existing flows below are established from source code and documentation,
-not from a running-system check. Planned flows describe the Step 1 target.
-Frequencies for planned ingestion are design goals, to be validated in Step 3.
+Existing source flows are established from code and documentation, not a source
+runtime check. F07 is the verified Step 2 cloud upload. Other platform flows
+remain planned; their frequencies are design goals to validate in Step 3.
 
 ## Flow matrix
 
@@ -21,7 +21,7 @@ Frequencies for planned ingestion are design goals, to be validated in Step 3.
 | F04 | Existing source code | Operational PostgreSQL | Buyer IDs, saved-card availability and product catalogue | Live traffic generator | At generator startup; new sign-ups extend its buyer list | SQL results |
 | F05 | Existing source code | Live traffic generator | Simulated sign-ups, product lookups, cart changes, checkout and warehouse advancement | FastAPI storefront | Continuous, on an accelerated simulation clock | HTTP and JSON; simulated-time header |
 | F06 | Existing source code | Live traffic generator | `product_viewed`, `added_to_cart`, `order_placed` | Kafka topic `clickstream` | Per generated event | UTF-8 JSON, keyed by `buyer_id`, with `schema_version` |
-| F07 | Planned: Step 2 | Versioned released CSVs for the seven tables listed below | Initial raw relational snapshots | Shared GCS Bronze bucket | Initial load; repeat only as a separately identified load | CSV input, partitioned Parquet output |
+| F07 | Verified: Step 2 | Local marketplace CSV exports for the seven tables listed below; source hashes recorded | Initial raw relational snapshots, all columns retained as strings | `gs://data-engineering-i1-marketplace-group/bronze/snapshot/`, `europe-west1` | Completed 2026-10-26; another run creates a distinct load | CSV input, Snappy Parquet partitioned by `ingestion_date` and `load_id` |
 | F08 | Planned: Step 3 | Operational PostgreSQL | `orders`, `order_items`, `review`, `product_reviews`, `product`, `customer_shipping`, `shipping_details` | PostgreSQL connector, then GCS Bronze under a connector-specific prefix | Initial snapshot, then hourly target | SQL / connector records, partitioned Parquet output |
 | F09 | Planned: Step 3 | Operational PostgreSQL `orders` | New orders after the saved `order_id` cursor | Custom SQL extractor, then a separate GCS Bronze prefix | Hourly target | SQL results, partitioned Parquet output |
 | F10 | Planned: Step 3 | Kafka `clickstream` | Valid events; invalid original payloads with rejection details | Python consumer, GCS Bronze and `bronze/_dlq/` | Continuous consumption, buffered writes | JSON input; Parquet for valid rows; rejected payload and metadata in DLQ objects |

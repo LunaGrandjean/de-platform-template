@@ -1,0 +1,39 @@
+{
+  "captured_on": "2026-10-26",
+  "provenance": "Prior personal exercise reports, transcribed without rerunning BigQuery jobs.",
+  "reports": [
+    {
+      "file": "../data-engineering/report.md",
+      "sha256": "fa547a7b384818924e83e4d08fe970e814d123bd961f209afd3589db8ca631a6"
+    },
+    {
+      "file": "../data-engineering/rapport_data_engineering.md",
+      "sha256": "1853d66c086dfdc803c7845d6c81850fd931f71847d0a6378179a382b4084313"
+    }
+  ],
+  "limitations": [
+    "Original job IDs unavailable",
+    "Query cache setting not recorded",
+    "Timings are single reported observations",
+    "Old object manifests unavailable"
+  ],
+  "csv_vs_parquet": {
+    "csv_bytes": 10373925,
+    "snappy_parquet_bytes": 3546854
+  },
+  "august_2026": {
+    "units_sold": 33231,
+    "daily": {
+      "objects": 45,
+      "parquet_bytes": 661116,
+      "bytes_processed_mib_approx": 0.075,
+      "execution_ms": 444
+    },
+    "daily_product": {
+      "objects": 8649,
+      "parquet_bytes": 24781824,
+      "bytes_processed_mib_approx": 0.075,
+      "execution_ms": 1546
+    }
+  }
+}

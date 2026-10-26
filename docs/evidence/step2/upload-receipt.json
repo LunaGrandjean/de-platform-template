@@ -1,0 +1,145 @@
+{
+  "bucket": "data-engineering-i1-marketplace-group",
+  "load_id": "20261026T105159Z-2efcb86a",
+  "objects": [
+    {
+      "bytes": 4680113,
+      "generation": 1793011965096829,
+      "md5": "Wf2DR4dTZ4g+9B1L3cBH6Q==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "6a18ce409572f1a11315c2a2e3c3af749f71442c604cfdf57cb0b7cc8eccb827"
+    },
+    {
+      "bytes": 4683583,
+      "generation": 1793011965521617,
+      "md5": "Wzwbmfry9r3iloZ4urquuw==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "555a0e076cc65b8fa43557a15f692cb37c107e1b688334798f3e5a990afac37a"
+    },
+    {
+      "bytes": 1121409,
+      "generation": 1793011965854978,
+      "md5": "mo0yeBSJDAMTICVLCvByAA==",
+      "name": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "sha256": "f0f646d7700d855fa9d3b1e738c348a53c693fc7d4b0cfffca360c5073805653"
+    },
+    {
+      "bytes": 1164406,
+      "generation": 1793011966102714,
+      "md5": "5wS4cFnDTzlO9JWeMWtTRA==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "ba338ef3da1d50938c9c2331f8c50e8df05086b927203de448f99a5f1a25cdea"
+    },
+    {
+      "bytes": 1173067,
+      "generation": 1793011966363347,
+      "md5": "hH8aVdGmZ1d90rwWJzPV6Q==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "c29ffd466763fb555369a09df303f65e4447baf36667c7cf65562ed9efb6d944"
+    },
+    {
+      "bytes": 1158108,
+      "generation": 1793011966696985,
+      "md5": "FT8Z9K3qmS7wsanqiZSQMA==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "sha256": "aed56522260029d5ff6e1571ef35b8e335f53c7747af1cf465041c04a917a138"
+    },
+    {
+      "bytes": 1156669,
+      "generation": 1793011966939039,
+      "md5": "CeFqsF6pzTGTGefEfoqN5Q==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00003.parquet",
+      "sha256": "9cc82c4f180e1efe9e95a71e4b95a9e12a75c48668a5e838153c47cfd0f1dfa1"
+    },
+    {
+      "bytes": 140117,
+      "generation": 1793011967148411,
+      "md5": "tpXVQjlGSp4MZYQS/BCBHQ==",
+      "name": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00004.parquet",
+      "sha256": "b151d73ccbc50e74062ee8c131e170c27cc0b609dbf4467a70c41e8ae35591a0"
+    },
+    {
+      "bytes": 16583867,
+      "generation": 1793011967985447,
+      "md5": "4DBz2fPt6FaWX4qh+BEblQ==",
+      "name": "bronze/snapshot/review/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "eaf6c6cdd41986cb780298c36345e5928abc2e1843f06864bfb0f24f5069e63b"
+    },
+    {
+      "bytes": 1659262,
+      "generation": 1793011968318201,
+      "md5": "bhlUGJ4lBmySkJeCKWaMQw==",
+      "name": "bronze/snapshot/review/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "5999f291d079b4951184b97a47c92e865a0b0d0a3434ae55f8d7c84b068f657f"
+    },
+    {
+      "bytes": 1852959,
+      "generation": 1793011968595571,
+      "md5": "se45XXdUliXOEHDZuYFm+A==",
+      "name": "bronze/snapshot/product_reviews/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "b483b6112e930b0452cc344cfbe63a4d0473f3ef2bdfba793884d477fc8c9cd4"
+    },
+    {
+      "bytes": 205864,
+      "generation": 1793011968816604,
+      "md5": "Oybhs+ZLr5HTZSS3WkB1Og==",
+      "name": "bronze/snapshot/product_reviews/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "53fdf3643aaeea55b5a8fbb3af1b330fd6a123930d8a0e336e39297a9eee6792"
+    },
+    {
+      "bytes": 7268120,
+      "generation": 1793011969329025,
+      "md5": "q5pUMipdInKbE9BDNM3QDQ==",
+      "name": "bronze/snapshot/product/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "10a6283a689f83d803005857f200691e62be10d607057d2eb5f26105d54566f3"
+    },
+    {
+      "bytes": 4011871,
+      "generation": 1793011969717828,
+      "md5": "u263rbj8KE7dkZXkpFc/uw==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "c4d69796dc3c19a0ca85703ff005ee50bea6ec53c9f0a0ef64edcd027bd1473c"
+    },
+    {
+      "bytes": 4012103,
+      "generation": 1793011970087388,
+      "md5": "sFyg02+ry2dt9U2b8gkIWw==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "42e5a6d990b8fffe7a54b07c5ae31bed30fa5cd643092a753755effca484297b"
+    },
+    {
+      "bytes": 1814,
+      "generation": 1793011970264641,
+      "md5": "Jr9COo1v2OVMOBwCx0k8mQ==",
+      "name": "bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "sha256": "e69bdab0503007630f8a7f9a2842e40a736080782b36a7925c65decf5e6d23d1"
+    },
+    {
+      "bytes": 5038718,
+      "generation": 1793011970670724,
+      "md5": "Rs1m2v/7Rbx5BGJzYNCc3w==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet",
+      "sha256": "4bfff43dd753b522bfc609bc193439d4f263aaba77ccea457febc0097d4aafb8"
+    },
+    {
+      "bytes": 5034335,
+      "generation": 1793011972659577,
+      "md5": "Qrl0tOT93rFKSiyq6o7C4Q==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet",
+      "sha256": "289936ee84ae5abac5f72afdc181c49c861a08c3aed64c7ed892683162104e5c"
+    },
+    {
+      "bytes": 2880,
+      "generation": 1793011972856018,
+      "md5": "g+o5sv0gDDKBsw1X9UC88Q==",
+      "name": "bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet",
+      "sha256": "d2337b3db37b14a95d5e86150258afefa27f83ee8a35c01ad927a1f281ba6f28"
+    }
+  ],
+  "parquet_bytes": 60949265,
+  "parquet_objects": 19,
+  "remote_manifest": "bronze/_manifests/20261026T105159Z-2efcb86a.json",
+  "remote_manifest_bytes": 9208,
+  "status": "uploaded_and_verified",
+  "verified_at_utc": "2026-10-26T11:01:41.733530+00:00"
+}
