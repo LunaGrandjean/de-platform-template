@@ -5,7 +5,11 @@ description = "Student data platform tools for Albert's Marketplace"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "google-cloud-storage==3.16.0",
+    "jsonschema[format]>=4.23,<5",
+    "kafka-python>=3.0,<4",
+    "psycopg[binary]>=3.2,<4",
     "pyarrow==25.0.1",
+    "python-dotenv>=1.0,<2",
 ]
 
 [tool.uv]

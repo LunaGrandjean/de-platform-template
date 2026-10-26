@@ -9,19 +9,22 @@ and country without serving analytical queries from the checkout database.
 The target is a two-tier architecture: a raw Parquet lake in GCS followed by
 selected native BigQuery tables and curated analytical models. Bronze retains
 arrival evidence, Silver will establish trusted records, and Gold will expose
-shared business measures. Step 2 has deployed and verified the raw GCS snapshot;
-automated ingestion, the warehouse and the curated models remain planned.
+shared business measures. Step 2 has deployed and verified the raw GCS snapshot.
+Step 3 now has Python ingestion code and local fault-injection tests; live
+PostgreSQL/Kafka/Airbyte deployment is pending on a teammate's Docker machine.
+The warehouse and curated models remain planned.
 
 ## Context and target diagram
 
 Solid arrows describe the provided source-code flows and the verified Step 2
-CSV-to-GCS path. Dashed arrows describe planned platform flows. The source
+CSV-to-GCS path. Dashed arrows describe platform paths not yet verified live,
+including the Step 3 Python jobs that have passed only local tests. The source
 stack's runtime status has not been checked; the status table distinguishes it
 from the cloud bucket and upload that were actually verified on 2026-10-26.
 
 ```mermaid
 flowchart LR
-    subgraph source[Provided source system - code present]
+    subgraph source[Teammate Docker host - source code present, runtime pending]
         shop[Shopper / Streamlit]
         api[FastAPI storefront]
         pg[(PostgreSQL 17)]
@@ -35,11 +38,11 @@ flowchart LR
         live -->|Versioned events| kafka
     end
 
-    subgraph ingestion[Step 2 snapshot deployed - Step 3 automation planned]
+    subgraph ingestion[Step 2 deployed - Step 3 Python tested locally, live setup pending]
         initial[CSV to Snappy Parquet with uv - verified]
-        connector[PostgreSQL connector: seven tables]
-        python[Python extractor: orders, separate path]
-        consumer[Kafka consumer: schema validation]
+        connector[Airbyte CDC: seven tables - setup pending]
+        python[Python orders ID cursor - local tests passed]
+        consumer[Python Kafka + JSON Schema v1 - local tests passed]
     end
 
     subgraph gcp[Google Cloud: europe-west1 - Bronze deployed, warehouse planned]
@@ -57,8 +60,8 @@ flowchart LR
     kafka -.-> consumer
     connector -.-> bronze
     python -.-> bronze
-    consumer -.->|Valid events| bronze
-    consumer -.->|Invalid payload, reason and time| dlq
+    consumer -.->|raw bytes + provenance / UTC event_date| bronze
+    consumer -.->|base64 original + reason + rejection time| dlq
     bronze -.->|Planned reader: restricted warehouse loader| raw
     raw -.->|Type, reconcile and check| silver
     silver -.->|Aggregate shared measures| gold
@@ -67,10 +70,12 @@ flowchart LR
 
 The connector's seven tables are `orders`, `order_items`, `review`,
 `product_reviews`, `product`, `customer_shipping` and `shipping_details`.
-The Python `orders` path demonstrates incremental SQL extraction and remains
-separate from the connector path. Sales models must not combine overlapping
-copies. Clickstream supports behaviour analysis; it is not an additional
-source of sold units.
+The Python `orders` path demonstrates insert-only SQL extraction and remains
+separate from the proposed authoritative CDC connector. It misses updates,
+deletes and lower IDs committing after its cursor. Kafka offsets are committed
+only after all valid/DLQ writes in a poll; replay can duplicate records. Sales
+models must not combine overlapping copies. Clickstream supports behaviour
+analysis; it is not an additional source of sold units.
 
 ## Implementation status
 
@@ -80,14 +85,16 @@ source of sold units.
 | Shared Bronze bucket | Verified `gs://data-engineering-i1-marketplace-group`, `europe-west1`, Standard; public access prevention enforced, uniform access enabled | Have all group members test their actual Google access; audit inherited permissions |
 | Partitioned Parquet | Seven raw tables, 1,296,708 rows, 19 Snappy files and one completion manifest; local value round-trips and remote checksums verified | Step 3: automate independent ingestion paths and explicit snapshot handover |
 | Lifecycle and bucket IAM | Live rules and policy exported; non-deleting transitions at 30/90/365 days; broad project convenience-group grants remain | Review effective access and future least-privilege identities |
-| Connector, extractor, consumer and DLQ | Planned | Step 3: demonstrate independent writes, schema rejection and restart behaviour |
+| Airbyte connector | CDC plan, least-scope source SQL and catalog checker prepared; not configured/live verified | Docker operator: real seven-stream export, CDC jobs, Parquet metadata, secret exclusion and WAL measurements |
+| Custom SQL extractor | Implemented with psycopg, persistent cursor, bounded retries and local failure tests | Real PostgreSQL-to-GCS run and restart measurements |
+| Kafka consumer and DLQ | Implemented with JSON Schema, raw Parquet, manual commits and local rejection/replay tests; no live GCS DLQ objects claimed | Real broker: publish malformed event, inspect GCS DLQ and later valid event, then restart same group |
 | Native BigQuery working tables | Planned | Step 4: record dataset, selected tables, load jobs and query evidence |
 | Silver and Gold | Model design only | Lesson 5: implement and test business transformations |
 
 ## Bronze, Silver and Gold contracts
 
 Bronze's initial snapshot has been verified against the contract below. Silver,
-Gold, automated events and the rejected-event path remain target contracts.
+Gold, live automated events and cloud rejected-event storage remain target contracts.
 
 | Layer | Contains | Required guarantees | Intended readers |
 |---|---|---|---|
@@ -112,10 +119,10 @@ separate the verified snapshot from future ingestion paths:
 |---|---|
 | `bronze/snapshot/<table>/ingestion_date=YYYY-MM-DD/load_id=<id>/` | Verified: initial raw CSV-derived snapshots, with source hashes and unique load identity |
 | `bronze/_manifests/<load-id>.json` | Verified: completion marker and source/row/file checksums |
-| `bronze/postgres/<table>/` | Planned: authoritative connector arrivals |
-| `bronze/python/orders/` | Planned: custom extractor arrivals, excluded from the authoritative sales union |
-| `bronze/kafka/clickstream/` | Planned: accepted events with schema and offset provenance |
-| `bronze/_dlq/` | Planned: original rejected events, reasons and rejection timestamps |
+| `bronze/postgres/<table>/ingestion_date=.../sync_id=.../` | Proposed CDC destination layout; real connector export pending |
+| `bronze/python/orders/ingestion_date=.../` | Implemented; live writes pending; custom path excluded from authoritative sales |
+| `bronze/kafka/<topic>/event_date=.../` | Implemented; live writes pending; complete raw payload plus Kafka offsets |
+| `bronze/_dlq/<topic>/rejection_date=.../` | Implemented; live writes pending; original bytes, reasons and rejection times |
 
 Step 2 uses ingestion date because all seven tables can be landed without joins
 or source-value changes. Readers must select a completed load rather than sum
@@ -127,8 +134,10 @@ the access audit. No separate member-access or least-privilege claim is made.
 The [applied lifecycle](../infra/lifecycle.json) transitions `bronze/` objects to
 Nearline at age 30 days, Coldline at 90 and Archive at 365, without deletion.
 The bucket also has a seven-day soft-delete policy. Credentials stay outside
-Git. Step 3 will specify clickstream partitioning and late-event handling and
-introduce read-only source extraction credentials.
+Git. Step 3's clickstream implementation accepts late events into their UTC
+event-date partition and stores invalid events by rejection date. Source-role,
+CDC-slot and Airbyte HMAC credential setup remains the operator's responsibility;
+no such role, slot or key has been created by this Step 3 preparation.
 
 ## Model and design references
 
@@ -140,6 +149,9 @@ introduce read-only source extraction credentials.
 - [Step 2 setup and verification](bronze-setup.md)
 - [Data dictionary](data-dictionary.md) and [cost baseline](costs.md)
 - [Live bucket evidence](evidence/step2/bucket.json) and [upload receipt](evidence/step2/upload-receipt.json)
+- [Step 3 ingestion jobs](../ingestion/README.md), [failure modes](ingestion-failure-modes.md)
+  and [ingestion-mode ADR](adr/0003-ingestion-modes.md)
+- [Docker operator handoff](runbooks/step3-docker-handoff.md) and [local checks](evidence/step3/local-checks.json)
 
 Update this diagram and the implementation-status table after each step using
 the actual resource identifiers and verification results.

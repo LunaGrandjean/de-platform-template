@@ -91,8 +91,29 @@ Default Credentials; no administrator installation or `gcloud` is required.
 Generated CSV/Parquet data and credentials are excluded from Git. The committed
 [evidence](docs/evidence/step2/) contains metadata, counts and checksums only.
 
-Group-member Google access still needs individual verification. Steps 3 and 4
-will add automated ingestion and the warehouse.
+Group-member Google access still needs individual verification.
+
+### Step 3: Three Roads into Bronze
+
+The Python jobs are implemented and locally tested. A group member with working
+Docker will run PostgreSQL, Kafka and Airbyte and collect live evidence. **Step 3
+is not yet deployed/complete**; local tests are not a substitute for real source,
+broker and connector validation.
+
+| Deliverable | Content / status |
+|---|---|
+| [Ingestion guide](ingestion/README.md) | uv installation, job commands, checkpoints and delivery guarantees |
+| [Orders extractor](ingestion/extract_orders.py) | Parameterised SQL, persistent cursor, single-writer lock and bounded connection retries |
+| [Kafka consumer](ingestion/consume_clickstream.py) and [schema v1](ingestion/clickstream.schema.json) | Validation, complete raw payload, Parquet, DLQ and commit-after-write behaviour |
+| [Connector plan](ingestion/airbyte/connection-plan.json) | Seven-table CDC / Append plan; not an applied configuration export |
+| [Docker handoff](docs/runbooks/step3-docker-handoff.md) | Teammate setup, malformed-event publish, real measurements and cleanup checklist |
+| [Ingestion ADR](docs/adr/0003-ingestion-modes.md) and [failure modes](docs/ingestion-failure-modes.md) | Chosen modes, honest gaps, credential handling and local failure evidence |
+| [Dictionary](docs/data-dictionary.md) and [architecture](docs/architecture.md) | Prepared schemas and three paths, with live status explicitly pending |
+
+No Step 3 service-account/HMAC key, CDC slot or cloud IAM grant is created by the
+Python preparation. The operator must provide the actual connector settings,
+successful jobs, GCS/DLQ objects and WAL/key-cleanup evidence before completion.
+Step 4 will add the warehouse after the group agrees the source handover.
 
 ## Start it
 

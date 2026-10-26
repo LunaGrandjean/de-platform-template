@@ -1,0 +1,73 @@
+{
+  "recorded_at_utc": "2026-10-26T12:40:47.181407+00:00",
+  "status": "local_fault_injection_passed",
+  "command": "uv run --locked -m unittest discover -s tests -p test_ingestion.py -v",
+  "tests_run": 25,
+  "failures": 0,
+  "errors": 0,
+  "test_cases": [
+    "test_ingestion.ClickstreamTests.test_dlq_failure_prevents_commit_even_after_a_valid_write",
+    "test_ingestion.ClickstreamTests.test_failed_offset_commit_causes_two_replayed_valid_rows",
+    "test_ingestion.ClickstreamTests.test_invalid_event_is_durable_and_valid_following_event_continues",
+    "test_ingestion.ClickstreamTests.test_invalid_utf8_tombstones_duplicate_keys_and_nonfinite_json_go_to_dlq",
+    "test_ingestion.ClickstreamTests.test_only_explicit_next_offsets_are_committed_per_partition",
+    "test_ingestion.ClickstreamTests.test_order_event_validates_nested_line_quantities",
+    "test_ingestion.ClickstreamTests.test_parquet_failure_prevents_commit",
+    "test_ingestion.ClickstreamTests.test_partition_uses_utc_event_time_not_emission_time",
+    "test_ingestion.ClickstreamTests.test_schema_version_date_and_unknown_field_are_enforced",
+    "test_ingestion.ConnectorCatalogTests.test_accidental_source_column_omission_is_rejected",
+    "test_ingestion.ConnectorCatalogTests.test_missing_stream_is_rejected",
+    "test_ingestion.ConnectorCatalogTests.test_secret_column_and_overwrite_mode_are_rejected",
+    "test_ingestion.ConnectorCatalogTests.test_secret_table_selection_is_rejected",
+    "test_ingestion.ConnectorCatalogTests.test_seven_streams_pass_and_summary_does_not_copy_credentials",
+    "test_ingestion.ExtractorTests.test_corrupt_and_wrong_source_state_fail_closed",
+    "test_ingestion.ExtractorTests.test_crash_after_upload_replays_two_rows",
+    "test_ingestion.ExtractorTests.test_deletes_are_not_propagated",
+    "test_ingestion.ExtractorTests.test_late_lower_id_and_updates_are_not_captured",
+    "test_ingestion.ExtractorTests.test_restart_reads_only_new_ids_and_keeps_business_twins",
+    "test_ingestion.ExtractorTests.test_retry_backoff_recovers",
+    "test_ingestion.ExtractorTests.test_retry_exhaustion_is_bounded",
+    "test_ingestion.ExtractorTests.test_source_schema_change_does_not_drop_columns",
+    "test_ingestion.ExtractorTests.test_source_watermark_going_backwards_fails_closed",
+    "test_ingestion.ExtractorTests.test_state_lock_excludes_a_second_writer",
+    "test_ingestion.ExtractorTests.test_upload_failure_never_advances_cursor"
+  ],
+  "scope": "Real local Parquet/checkpoint writes; synthetic SQL fetches and Kafka commit callbacks. No external services contacted.",
+  "live_postgresql_verified": false,
+  "live_kafka_verified": false,
+  "live_connector_verified": false,
+  "step3_gcs_writes_verified": false,
+  "observed_simulation_metrics": {
+    "sql_duplicate_rows_after_checkpoint_failure": 2,
+    "kafka_duplicate_valid_rows_after_commit_failure": 2,
+    "lower_id_rows_missed_after_cursor_advance": 1,
+    "accepted_in_valid_invalid_valid_batch": 2,
+    "rejected_in_valid_invalid_valid_batch": 1,
+    "next_offset_committed_in_valid_invalid_valid_batch": 3,
+    "connection_attempt_limit_tested": 5,
+    "retry_delays_seconds": [
+      1,
+      2,
+      4,
+      8
+    ]
+  },
+  "live_measurements_pending": [
+    "Connector restart duplicates",
+    "Real SQL missed updates/deletes/late commits",
+    "Replication slot retained WAL bytes",
+    "Malformed message published to actual broker and verified in GCS DLQ",
+    "Unused slot/key cleanup"
+  ],
+  "package_versions": {
+    "psycopg": "3.3.6",
+    "kafka-python": "3.0.11",
+    "jsonschema": "4.26.0",
+    "google-cloud-storage": "3.16.0",
+    "pyarrow": "25.0.1"
+  },
+  "test_source_sha256": "d29e181399c596b44be6c56423abf9a6c2eebef12c7f0e5a325959f6d8cf1350",
+  "cli_help_checks": 4,
+  "local_output_isolation_checks": 2,
+  "bronze_regression_tests_passed": 4
+}
