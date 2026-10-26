@@ -15,6 +15,57 @@ password and payment card is synthetic. Product and review text comes from a
 public research dataset, and images are URLs into someone else's host, never
 copies. See [`docs/dataset-card.md`](docs/dataset-card.md).
 
+## Student data platform
+
+The course platform documentation is developed on branch `Luna`. The source
+system below provides its PostgreSQL data, released CSV extracts and Kafka
+events. The platform targets daily units sold by product and country.
+
+### Team
+
+| Member | GitHub handle | Contribution |
+|---|---|---|
+| Luna Grandjean | [@LunaGrandjean](https://github.com/LunaGrandjean) | Initial platform design and documentation |
+
+The remaining group members, cohort and group identifier have not been
+provided yet. Add them before submitting the group repository.
+
+### Step 1: Start the Platform
+
+| Deliverable | Content |
+|---|---|
+| [Data flows](docs/data-flows.md) | Sources, consumers, frequencies, formats and three risk questions |
+| [Target architecture ADR](docs/adr/0001-target-architecture.md) | Comparison of warehouse, lake, two-tier and lakehouse architectures |
+| [Architecture](docs/architecture.md) | Context diagram, current status and Bronze/Silver/Gold guarantees |
+| [Daily-demand star](docs/model/star-daily-demand.md) | Business process, grain, dimensions and measures |
+
+The architecture is a design at this stage; cloud resources and pipelines have
+not been verified or deployed as part of Step 1.
+
+Step 1 completion checklist:
+
+- [x] Document the source flows and their risks.
+- [x] Compare four architecture options and record the target decision.
+- [x] Add an architecture diagram and layer contracts.
+- [x] Sketch the daily-demand star schema.
+- [ ] Complete the team table, cohort and group identifier.
+- [ ] Verify a private group repository named `de-<cohort>-<group>` was created
+  from `de-platform-template`. This checkout's remote currently points to the
+  public source-system repository; a personal branch alone does not meet this
+  course requirement.
+- [ ] Add every member and `Charlestng` as collaborators and verify that all
+  invitations are accepted.
+- [ ] Email the private repository URL and group names to
+  `charlestanguypro@gmail.com`, with subject
+  `MSA-DAT09-02 | L01-REPO | <cohort> | <group>`.
+- [ ] Have every member push at least one commit.
+- [ ] Merge at least one pull request after another member reviews it.
+
+Keep the course repository and its access intact until marks are published.
+Submit changes through reviewed pull requests. Commit history is part of the
+assessment. Steps 2, 3 and 4 will add Bronze storage, automated ingestion and
+the warehouse, with a separate commit for each step.
+
 ## Start it
 
 You need Docker Desktop (or Docker Engine with Compose v2), about 6 GB of free
