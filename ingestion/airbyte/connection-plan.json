@@ -1,0 +1,25 @@
+{
+  "status": "proposed_not_deployed",
+  "purpose": "Human-readable setup contract; NOT an importable Airbyte configuration export.",
+  "source": {
+    "connector": "Postgres",
+    "replication_method": "CDC",
+    "publication": "marketplace_bronze_publication",
+    "replication_slot": "marketplace_bronze_slot",
+    "selected_public_tables": ["orders", "order_items", "review", "product_reviews", "product", "customer_shipping", "shipping_details"],
+    "unselected_tables": ["customer", "payment_details"]
+  },
+  "destination": {
+    "connector": "GCS",
+    "documented_version_target": "1.0.0",
+    "bucket": "data-engineering-i1-marketplace-group",
+    "region": "europe-west1",
+    "bucket_path": "bronze/postgres",
+    "path_format": "${STREAM_NAME}/ingestion_date=${YEAR}-${MONTH}-${DAY}/sync_id=${SYNC_ID}/${EPOCH}_",
+    "format": "Parquet",
+    "compression_codec": "SNAPPY",
+    "authentication": "HMAC key belonging to a dedicated service account; obtain from project administrator, never commit"
+  },
+  "connection": {"source_sync_mode": "incremental", "destination_sync_mode": "append", "schedule_target": "hourly"},
+  "required_live_evidence": ["Redacted configured catalog", "CDC source and Parquet destination settings", "Successful jobs and seven stream object counts", "Secret-field exclusions", "WAL retention measurement and unused slot cleanup", "Key owner and revocation record"]
+}

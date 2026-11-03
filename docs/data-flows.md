@@ -8,8 +8,9 @@ The student platform will isolate analytical reads from customer-serving
 systems and publish daily demand by product and country.
 
 Existing source flows are established from code and documentation, not a source
-runtime check. F07 is the verified Step 2 cloud upload. Other platform flows
-remain planned; their frequencies are design goals to validate in Step 3.
+runtime check. F07 is the verified Step 2 cloud upload. Step 3 Python code has
+passed local tests; F08–F10 still need live validation on the Docker operator's
+machine. Their frequencies remain design goals until that run.
 
 ## Flow matrix
 
@@ -22,9 +23,9 @@ remain planned; their frequencies are design goals to validate in Step 3.
 | F05 | Existing source code | Live traffic generator | Simulated sign-ups, product lookups, cart changes, checkout and warehouse advancement | FastAPI storefront | Continuous, on an accelerated simulation clock | HTTP and JSON; simulated-time header |
 | F06 | Existing source code | Live traffic generator | `product_viewed`, `added_to_cart`, `order_placed` | Kafka topic `clickstream` | Per generated event | UTF-8 JSON, keyed by `buyer_id`, with `schema_version` |
 | F07 | Verified: Step 2 | Local marketplace CSV exports for the seven tables listed below; source hashes recorded | Initial raw relational snapshots, all columns retained as strings | `gs://data-engineering-i1-marketplace-group/bronze/snapshot/`, `europe-west1` | Completed 2026-10-26; another run creates a distinct load | CSV input, Snappy Parquet partitioned by `ingestion_date` and `load_id` |
-| F08 | Planned: Step 3 | Operational PostgreSQL | `orders`, `order_items`, `review`, `product_reviews`, `product`, `customer_shipping`, `shipping_details` | PostgreSQL connector, then GCS Bronze under a connector-specific prefix | Initial snapshot, then hourly target | SQL / connector records, partitioned Parquet output |
-| F09 | Planned: Step 3 | Operational PostgreSQL `orders` | New orders after the saved `order_id` cursor | Custom SQL extractor, then a separate GCS Bronze prefix | Hourly target | SQL results, partitioned Parquet output |
-| F10 | Planned: Step 3 | Kafka `clickstream` | Valid events; invalid original payloads with rejection details | Python consumer, GCS Bronze and `bronze/_dlq/` | Continuous consumption, buffered writes | JSON input; Parquet for valid rows; rejected payload and metadata in DLQ objects |
+| F08 | CDC setup prepared; deployment pending | Operational PostgreSQL | `orders`, `order_items`, `review`, `product_reviews`, `product`, `customer_shipping`, `shipping_details` | Airbyte CDC, then `bronze/postgres/`; seven-table selection excludes password/card tables | Initial snapshot, then hourly target | Connector records, Parquet/Snappy, ingestion-date/sync partitions |
+| F09 | Implemented/local tested; live pending | Operational PostgreSQL `orders` | New visible orders after a saved `order_id`; updates/deletes/late lower IDs missed | psycopg SQL extractor, then `bronze/python/orders/` | Automatic polling every 60 seconds while running | Native SQL values, Parquet/Snappy, ingestion-date partitions |
+| F10 | Implemented/local tested; live pending | Kafka `clickstream` | Schema-v1 accepted events; invalid original bytes, reason and time | Python consumer, GCS Bronze and `bronze/_dlq/` | Continuous polls; commit only after output persistence | Raw JSON bytes + metadata in Parquet by UTC event date; DLQ JSON by rejection date |
 | F11 | Planned: Step 4 | GCS Bronze | Selected relational tables needed by the demand workload | Native BigQuery working tables | After a successful ingestion batch | Parquet loads into native tables |
 | F12 | Planned: Lesson 5 | Selected raw BigQuery tables and Bronze evidence | Typed, reconciled orders and lines; one country mapping per buyer | BigQuery Silver transformations | Daily target | SQL and native tables |
 | F13 | Planned: Lesson 5 | BigQuery Silver | Units sold per product, country and order date | BigQuery Gold star, then analyst / business reports | Daily refresh; reports on demand | SQL tables, views and query results |

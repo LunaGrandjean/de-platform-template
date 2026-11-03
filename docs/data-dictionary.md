@@ -1,6 +1,6 @@
 # Bronze data dictionary
 
-Verified on 2026-10-26 for load `20261026T105159Z-2efcb86a` in
+The initial CSV snapshot was verified on 2026-10-26 for load `20261026T105159Z-2efcb86a` in
 `gs://data-engineering-i1-marketplace-group`, region `europe-west1`.
 The [manifest](evidence/step2/landing-manifest.json) lists actual columns, row
 counts and hashes. The SQL types below describe the operational schema; **every
@@ -126,8 +126,92 @@ classification if these tables were introduced. Exclude password and card-secret
 columns in future connector configuration before any Bronze write; do not rely
 on a later SQL model to remove them.
 
-Step 3 will add clickstream fields and the connector's actual metadata fields.
-They are not present in this CSV snapshot, so no Airbyte fields are claimed here.
+The following Step 3 sections describe implemented/planned schemas, **not new
+observed GCS tables**. No live connector or Kafka deployment has been verified.
+These fields are not part of the Step 2 CSV snapshot.
+
+## Step 3: custom SQL orders
+
+`extract_orders.py` expects the five operational `orders` fields documented
+above, without the CSV export index. Arrow types are `order_id: int64`,
+`buyer_id: string`, `discount_id: int64 nullable`, `payment_id: int64 nullable`,
+`order_date: date32`. The source SQL result retains nulls and the recorded date.
+The extractor does not add `_airbyte_*` fields. Ingestion date is a directory
+partition; the state file records the last written object and cursor separately.
+Parquet schema metadata also records `source_id`, `source_table` and the batch's
+exclusive lower / inclusive upper order-ID watermarks, without changing source columns.
+An unexpected source column stops extraction instead of being dropped.
+
+## Step 3: clickstream schema v1
+
+The source producer is [traffic.py](../generators/live/traffic.py). The
+[versioned validation schema](../ingestion/clickstream.schema.json) accepts the
+three event types below. Types refer to the source JSON; complete source bytes
+remain in Parquet `raw_value`. This preserves optional/nested fields even when
+they are not projected as separate Parquet columns.
+
+| Common field | JSON type | Meaning | Personal data? |
+|---|---|---|---|
+| `schema_version` | integer, exactly 1 | Contract version; unknown versions go to DLQ | No |
+| `event_id` | UUID string | Producer event identity; useful for later reconciliation | Yes: linkable behaviour ID |
+| `event_type` | string enum | `product_viewed`, `added_to_cart` or `order_placed` | No direct identifier; behaviour attribute |
+| `event_time` | RFC 3339 string | Simulated business event timestamp; UTC date determines the partition | No direct identifier; behaviour attribute |
+| `emitted_at` | RFC 3339 string | Producer's real wall-clock timestamp; preserve separately from event time | No direct identifier; behaviour attribute |
+| `buyer_id` | string, 1–40 characters | Links behaviour to a marketplace buyer | Yes: pseudonymous customer identifier |
+| `session_id` | UUID string | Links events within a shopping session | Yes: behavioural/session identifier |
+
+| Event-specific field | JSON type / event | Meaning | Personal data? |
+|---|---|---|---|
+| `p_id` | string / views and cart additions | Product ID | No direct identifier; viewed/purchased item |
+| `price` | nonnegative number / views and cart additions | Source product unit price | No direct identifier; behaviour attribute |
+| `qty` | positive integer / cart additions | Quantity added | No direct identifier; behaviour attribute |
+| `order_id` | positive integer / order placement | Links event to the relational order; never add this sale to relational demand a second time | Yes: linkable transaction ID |
+| `payment_method` | string enum / order placement | Credit Card, PayPal or Bank Transfer; no card number | No direct identifier; purchase attribute |
+| `amount` | nonnegative number / order placement | Order payment amount in EUR | No direct identifier; purchase attribute |
+| `currency` | string, `EUR` / order placement | Payment currency | No |
+| `items` | nonempty array of objects / order placement | Purchased order lines | No direct identifier; purchase attributes linked to buyer |
+| `items[].p_id` | string | Line product ID | No direct identifier |
+| `items[].qty` | positive integer | Line purchased units | No direct identifier |
+| `items[].price` | nonnegative number | Unit purchase price supplied by the API | No direct identifier |
+
+The seven common fields are projected into Parquet with original string values
+and `schema_version: int32`. Other source JSON fields are in `raw_value`.
+Additional Parquet columns are:
+
+| Column | Arrow type | Meaning | Personal data? |
+|---|---|---|---|
+| `raw_value` | binary | Exact original UTF-8 JSON bytes, including all nested/source fields | Yes: contains buyer/session/purchase data |
+| `_kafka_topic` | string | Source topic | No |
+| `_kafka_partition` | int32 | Source partition | No |
+| `_kafka_offset` | int64 | Offset; together with topic/partition identifies a source record | Indirect: linkable record provenance |
+| `_kafka_key` | binary, nullable | Original message key; source generator uses buyer ID | Yes: pseudonymous buyer ID |
+| `_kafka_timestamp_ms` | int64, nullable | Broker record timestamp in epoch milliseconds | No direct identifier |
+| `_ingested_at` | UTC timestamp string | Consumer processing timestamp | No direct identifier |
+
+Malformed source rows are not silently dropped. Their DLQ JSON fields are
+`original_value_base64` (exact payload bytes or null for a tombstone),
+`original_key_base64`, `topic`, `partition`, `offset`, `rejection_reason` and
+`rejected_at_utc`. The original payload/key may contain personal data and the
+DLQ uses the same restricted raw-data access expectations as Bronze.
+
+## Step 3: expected Airbyte metadata
+
+The [GCS 1.0 migration reference](https://docs.airbyte.com/integrations/destinations/gcs-migrations)
+documents these field names. They belong to the connector, not the hand-written
+extractor. **The installed destination version and actual Parquet physical
+representation still need inspection**; do not label this as an observed schema.
+
+| Field | Expected meaning / representation | Personal data? |
+|---|---|---|
+| `_airbyte_raw_id` | String row identifier assigned during extraction/loading; not a source primary key and not a business-deduplication key | Indirect: linkable ingestion record |
+| `_airbyte_extracted_at` | Extraction timestamp; representation depends on destination/output (epoch-ms or logical timestamp must be checked) | No direct identifier |
+| `_airbyte_meta` | Structured metadata, including sync/change information; inspect actual nested fields and types | Possible if diagnostic change details include source values |
+| `_airbyte_generation_id` | Integer generation identifier; distinguishes refresh generations | No |
+
+Inspect and document any emitted CDC fields such as deletion markers and LSNs
+before declaring the connector dictionary complete. The configured catalog
+checker validates source fields/modes; it does not manufacture Airbyte metadata
+or certify that a destination has produced those fields.
 
 ## References
 
