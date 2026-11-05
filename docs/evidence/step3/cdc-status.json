@@ -1,0 +1,136 @@
+{
+  "recorded_at_utc": "2026-11-05T16:20Z",
+  "status": "debezium_snapshot_completed_and_streaming_to_bronze",
+  "source_database": "marketplace",
+  "configuration": {
+    "wal_level": "logical",
+    "max_slot_wal_keep_size": "512MB",
+    "max_replication_slots": 10
+  },
+  "ingestion_role": {
+    "name": "marketplace_ingest",
+    "can_login": true,
+    "replication_privilege": true
+  },
+  "publication": {
+    "name": "marketplace_bronze_publication",
+    "publishes_all_tables": false,
+    "operations": {
+      "insert": true,
+      "update": true,
+      "delete": true,
+      "truncate": false
+    },
+    "tables": [
+      "public.customer_shipping",
+      "public.order_items",
+      "public.orders",
+      "public.product",
+      "public.product_reviews",
+      "public.review",
+      "public.shipping_details"
+    ]
+  },
+  "replication_slots": [
+    {
+      "name": "marketplace_bronze_slot",
+      "type": "logical",
+      "plugin": "pgoutput",
+      "database": "marketplace",
+      "active": true,
+      "active_pid": 41047,
+      "wal_status": "reserved",
+      "retained_wal_bytes": 130600,
+      "restart_lsn": "0/219EC5F8",
+      "confirmed_flush_lsn": "0/21A8EAD8",
+      "invalidation_reason": null
+    }
+  ],
+  "active_replication_clients": [
+    {"pid": 41047, "application_name": "Debezium Streaming", "client_address": "172.18.0.7/32"}
+  ],
+  "route3_cdc_consumer": {
+    "connector": "Debezium PostgreSQL connector 3.7.0.Final",
+    "connect_service": "debezium-connect",
+    "connect_rest_connector_name": "marketplace-bronze",
+    "connector_state": "RUNNING",
+    "task_states": ["RUNNING"],
+    "connect_restart_recovery": "Debezium container restarted twice; connector and task returned to RUNNING from stored Kafka Connect config/offsets, the existing slot remained active, and the source offset advanced to LSN 0/219F2CA0.",
+    "connect_rest_url": "http://127.0.0.1:18083 (loopback only; port 8083 was already occupied locally)",
+    "slot": "marketplace_bronze_slot",
+    "publication": "marketplace_bronze_publication",
+    "snapshot": "initial snapshot completed; streaming began from LSN 0/21545FC0",
+    "kafka_topics": [
+      "__debezium-heartbeat.marketplace",
+      "marketplace.public.customer_shipping",
+      "marketplace.public.order_items",
+      "marketplace.public.orders",
+      "marketplace.public.product",
+      "marketplace.public.product_reviews",
+      "marketplace.public.review",
+      "marketplace.public.shipping_details"
+    ],
+    "bronze_sink": "Python consumer ingestion/consume_cdc.py, group marketplace-cdc-bronze-v1",
+    "bronze_prefix": "bronze/cdc/<table>/ingestion_date=2026-11-05/",
+    "consumer_state": "running in the operator session; offsets manually committed after object uploads",
+    "heartbeat_topic": "__debezium-heartbeat.marketplace, provisioned because Kafka auto topic creation is disabled",
+    "slot_feedback": "active PID 41047; after provisioning the heartbeat topic, confirmed_flush_lsn advanced from 0/1CE18330 to 0/21A8EAD8. Retained WAL fell from about 76 MB to 56 bytes at 16:00 UTC, 144920 bytes at 16:18 UTC, and 130600 bytes at 16:20 UTC.",
+    "sink_lag": {
+      "observed_at_utc": "2026-11-05T16:20Z",
+      "partitions": 21,
+      "partitions_with_lag": 0,
+      "total_lag": 0
+    },
+    "consumer_restart_recovery": {
+      "group": "marketplace-cdc-bronze-v1",
+      "before_restart_lag": 3,
+      "after_restart_lag": 0,
+      "partitions_after_restart": 21,
+      "result": "consumer resumed from committed offsets and caught up"
+    },
+    "last_gcs_inventory": {
+      "observed_at_utc": "2026-11-05T16:18Z",
+      "total_objects": 746,
+      "total_bytes": 150465568,
+      "objects_by_table": {
+        "customer_shipping": 95,
+        "order_items": 220,
+        "orders": 133,
+        "product": 81,
+        "product_reviews": 58,
+        "review": 52,
+        "shipping_details": 107
+      }
+    },
+    "parquet_footer_check": {
+      "object_prefix": "bronze/cdc/orders/ingestion_date=2026-11-05/",
+      "rows_in_sample_object": 3910,
+      "row_groups": 1,
+      "compression": "SNAPPY",
+      "columns": ["raw_key", "raw_value", "_is_tombstone", "_kafka_topic", "_kafka_partition", "_kafka_offset", "_kafka_timestamp_ms", "_kafka_headers_json", "_ingested_at"],
+      "read_scope": "Footer bytes plus only the raw event key/value for the synthetic test ID; no other Bronze row values were inspected"
+    },
+    "crud_validation": {
+      "observed_at_utc": "2026-11-05T16:15Z",
+      "table": "public.product",
+      "synthetic_key": "Tb748becf6",
+      "committed_operations": ["INSERT", "UPDATE", "DELETE"],
+      "rows_affected": [1, 1, 1],
+      "bronze_events": [
+        {"partition": 0, "offset": 14346, "op": "c"},
+        {"partition": 0, "offset": 14347, "op": "u"},
+        {"partition": 0, "offset": 14348, "op": "d"},
+        {"partition": 0, "offset": 14349, "tombstone": true}
+      ],
+      "cleanup_verified": "read-only lookup confirmed the synthetic source row is absent"
+    },
+    "delivery": "at-least-once; duplicate GCS objects are possible after write-before-commit failure and are reconciled by topic/partition/offset",
+    "snapshot_overlap": "initial CDC snapshot is a separate baseline and overlaps Step 2 snapshot and orders backfill; do not sum these copies",
+    "truncate": "not captured because the publication excludes TRUNCATE; treat any future source TRUNCATE as a reset requiring a coordinated full snapshot and reconciliation before resuming CDC"
+  },
+  "ownership": "Group confirmed marketplace_bronze_slot as the group's existing slot and instructed its use. The Debezium connector now uses it; no second slot was created.",
+  "actions_taken": "Started Debezium Connect and internal/data/heartbeat topics, registered a connector against the existing slot/publication, completed the initial snapshot, and ran/restarted the Python CDC sink to GCS. Committed and then deleted one synthetic product row to verify INSERT/UPDATE/DELETE plus the delete tombstone. No slot or publication was created, dropped, or altered.",
+  "remaining_cdc_evidence": [
+    "Continue monitoring slot WAL against the 512 MB max_slot_wal_keep_size limit."
+  ]
+}
