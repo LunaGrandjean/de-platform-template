@@ -18,6 +18,30 @@ unparsed dates, quantities or prices, and 0 order lines without an order.
 Evidence: [external tables](evidence/step4/external-tables.json),
 [native tables](evidence/step4/native-tables.json).
 
+### Step 3 paths
+
+Two of the Step 3 Bronze paths are also exposed as external tables in
+`g07_bronze`. Unlike the snapshot tables, they read their whole prefix, so they
+grow as new files land; the directory date is a partition column and a filter
+on it is required. Counts below were checked against the Parquet footers on
+2026-11-05 ([evidence](evidence/step4/external-tables-step3.json)).
+
+| Table | Bronze prefix | Partition column | Rows | Objects |
+|---|---|---|---:|---:|
+| `python_orders` | `bronze/python/orders/` | `ingestion_date` | 225,381 | 50 |
+| `kafka_clickstream` | `bronze/kafka/clickstream/` | `event_date` | 29,144 | 129 |
+
+- `python_orders` holds typed columns (`order_id` INT64, `order_date` DATE). It
+  contains all 222,644 snapshot order IDs plus 2,737 newer ones (orders up to
+  2026-09-25), with no repeated `order_id`. It overlaps the snapshot: never sum
+  both.
+- `kafka_clickstream` holds 20,674 `product_viewed`, 6,183 `added_to_cart` and
+  2,287 `order_placed` events from 2026-09-15 to 2026-09-24. It describes
+  behaviour, not sales.
+- Not exposed yet: `bronze/kafka/clickstream-step3-check/` (the malformed-event
+  test) and `bronze/cdc/`, whose file layout may still change.
+- The native tables are still built from the snapshot only.
+
 ## Reproduce
 
 From the repository root, with Application Default Credentials that can read
@@ -26,6 +50,7 @@ the bucket and run BigQuery jobs:
 ```bash
 uv sync --locked
 uv run --locked scripts/warehouse.py external   # g07_bronze: create and count-check the external tables
+uv run --locked scripts/warehouse.py external-step3   # g07_bronze: Step 3 python and Kafka tables, checked against Parquet footers
 uv run --locked scripts/warehouse.py native     # g07_warehouse: prechecks, then rebuild the native tables
 uv run --locked scripts/warehouse.py measure    # run the queries below, cache off; writes the evidence file
 ```
@@ -92,7 +117,7 @@ with the data. Storage of the native tables (about 33 MB) is inside the free
 ## Limits
 
 - The native tables reflect one Bronze load. Rebuild them with `native` after a
-  new completed load; Step 3's live paths are not included yet.
+  new completed load; Step 3's live paths are exposed as external tables only.
 - Native tables are typed copies, not Silver: duplicate business orders and the
   buyer-to-country mapping are still unresolved.
 - Dry runs report 0 bytes for external tables; their cost is only known after

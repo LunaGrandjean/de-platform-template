@@ -1,0 +1,51 @@
+{
+  "note": "Prefix-wide tables: counts are a point in time and grow with new Step 3 files.",
+  "tables": [
+    {
+      "columns": [
+        "order_id",
+        "buyer_id",
+        "discount_id",
+        "payment_id",
+        "order_date",
+        "ingestion_date"
+      ],
+      "objects": 50,
+      "partition_column": "ingestion_date",
+      "require_partition_filter": true,
+      "rows": 225381,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/python/orders/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.python_orders"
+    },
+    {
+      "columns": [
+        "schema_version",
+        "event_id",
+        "event_type",
+        "event_time",
+        "emitted_at",
+        "buyer_id",
+        "session_id",
+        "raw_value",
+        "_kafka_topic",
+        "_kafka_partition",
+        "_kafka_offset",
+        "_kafka_key",
+        "_kafka_timestamp_ms",
+        "_ingested_at",
+        "event_date"
+      ],
+      "objects": 129,
+      "partition_column": "event_date",
+      "require_partition_filter": true,
+      "rows": 29144,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/kafka/clickstream/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.kafka_clickstream"
+    }
+  ],
+  "verified_at_utc": "2026-11-05T19:34:42.587458+00:00"
+}

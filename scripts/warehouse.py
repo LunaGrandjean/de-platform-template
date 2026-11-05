@@ -80,6 +80,72 @@ def external(client: bigquery.Client, manifest: dict) -> None:
         "load_id": manifest["load_id"], "tables": created})
 
 
+# Step 3 append-only paths. Unlike the snapshot, they grow, so each table reads
+# its whole prefix and exposes the directory date as a partition column.
+# bronze/kafka/clickstream-step3-check/ (the malformed-event test) is left out,
+# and bronze/cdc/ waits until its file layout is settled.
+STEP3_TABLES = {
+    "python_orders": {
+        "prefix": "bronze/python/orders",
+        "partition": "ingestion_date",
+        "description": "Step 3 custom SQL extract of orders (insert-only ID cursor). Overlaps the snapshot orders: do not sum both.",
+    },
+    "kafka_clickstream": {
+        "prefix": "bronze/kafka/clickstream",
+        "partition": "event_date",
+        "description": "Step 3 accepted clickstream events with raw payload and Kafka provenance, by UTC event date.",
+    },
+}
+
+
+def footer_rows(prefix: str) -> tuple[int, int]:
+    """Row and object counts from the Parquet footers, read independently of BigQuery."""
+    from google.cloud import storage
+    import pyarrow.parquet as pq
+
+    bucket = storage.Client(project=PROJECT).bucket(BUCKET)
+    rows = objects = 0
+    for blob in bucket.list_blobs(prefix=prefix + "/"):
+        if blob.name.endswith(".parquet"):
+            with blob.open("rb") as stream:
+                rows += pq.ParquetFile(stream).metadata.num_rows
+            objects += 1
+    return rows, objects
+
+
+def external_step3(client: bigquery.Client) -> None:
+    created = []
+    for name, spec in STEP3_TABLES.items():
+        config = bigquery.ExternalConfig("PARQUET")
+        config.source_uris = [f"gs://{BUCKET}/{spec['prefix']}/*.parquet"]
+        hive = bigquery.HivePartitioningOptions()
+        hive.mode = "AUTO"
+        hive.source_uri_prefix = f"gs://{BUCKET}/{spec['prefix']}/"
+        hive.require_partition_filter = True
+        config.hive_partitioning = hive
+        ref = bigquery.Table(f"{PROJECT}.{BRONZE_DATASET}.{name}")
+        ref.external_data_configuration = config
+        ref.description = spec["description"]
+        ref.labels = {**LABELS, "layer": "bronze"}
+        client.delete_table(ref, not_found_ok=True)
+        client.create_table(ref)
+        expected, objects = footer_rows(spec["prefix"])
+        count = next(iter(client.query(
+            f"SELECT COUNT(*) AS n FROM `{ref.reference}` WHERE {spec['partition']} IS NOT NULL",
+            job_config=bigquery.QueryJobConfig(maximum_bytes_billed=MAX_BYTES_BILLED)).result())).n
+        if count != expected:
+            raise ValueError(f"{name}: {count} rows read, Parquet footers say {expected}")
+        table = client.get_table(ref)
+        created.append({"table": str(ref.reference), "source_uris": config.source_uris,
+                        "partition_column": spec["partition"], "require_partition_filter": True,
+                        "objects": objects, "rows": count,
+                        "columns": [field.name for field in table.schema]})
+        print(f"{ref.reference}: {count} rows in {objects} objects, matches Parquet footers", flush=True)
+    write_json(EVIDENCE_DIR / "external-tables-step3.json", {
+        "verified_at_utc": datetime.now(timezone.utc).isoformat(), "tables": created,
+        "note": "Prefix-wide tables: counts are a point in time and grow with new Step 3 files."})
+
+
 NATIVE_SQL = {
     # Typed copy of Bronze orders. Duplicate business orders are kept.
     "orders": """
@@ -291,11 +357,13 @@ def measure(client: bigquery.Client) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["external", "native", "measure"])
+    parser.add_argument("command", choices=["external", "external-step3", "native", "measure"])
     args = parser.parse_args()
     client = bigquery.Client(project=PROJECT, location=LOCATION)
     if args.command == "external":
         external(client, json.loads(MANIFEST.read_text(encoding="utf-8")))
+    elif args.command == "external-step3":
+        external_step3(client)
     elif args.command == "native":
         native(client)
     else:
