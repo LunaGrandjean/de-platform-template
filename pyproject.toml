@@ -1,0 +1,12 @@
+[project]
+name = "albert-marketplace-platform"
+version = "0.1.0"
+description = "Student data platform tools for Albert's Marketplace"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "google-cloud-storage==3.16.0",
+    "pyarrow==25.0.1",
+]
+
+[tool.uv]
+package = false

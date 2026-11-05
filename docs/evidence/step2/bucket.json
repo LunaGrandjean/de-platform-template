@@ -1,0 +1,88 @@
+{
+  "etag": "CAE=",
+  "generation": "1793011944545380148",
+  "iamConfiguration": {
+    "bucketPolicyOnly": {
+      "enabled": true,
+      "lockedTime": "2027-01-24T10:52:25.001Z"
+    },
+    "publicAccessPrevention": "enforced",
+    "uniformBucketLevelAccess": {
+      "enabled": true,
+      "lockedTime": "2027-01-24T10:52:25.001Z"
+    }
+  },
+  "id": "data-engineering-i1-marketplace-group",
+  "kind": "storage#bucket",
+  "labels": {
+    "application": "albert-marketplace",
+    "layer": "bronze",
+    "managed-by": "python"
+  },
+  "lifecycle": {
+    "rule": [
+      {
+        "action": {
+          "storageClass": "NEARLINE",
+          "type": "SetStorageClass"
+        },
+        "condition": {
+          "age": 30,
+          "matchesPrefix": [
+            "bronze/"
+          ],
+          "matchesStorageClass": [
+            "STANDARD"
+          ]
+        }
+      },
+      {
+        "action": {
+          "storageClass": "COLDLINE",
+          "type": "SetStorageClass"
+        },
+        "condition": {
+          "age": 90,
+          "matchesPrefix": [
+            "bronze/"
+          ],
+          "matchesStorageClass": [
+            "STANDARD",
+            "NEARLINE"
+          ]
+        }
+      },
+      {
+        "action": {
+          "storageClass": "ARCHIVE",
+          "type": "SetStorageClass"
+        },
+        "condition": {
+          "age": 365,
+          "matchesPrefix": [
+            "bronze/"
+          ],
+          "matchesStorageClass": [
+            "STANDARD",
+            "NEARLINE",
+            "COLDLINE"
+          ]
+        }
+      }
+    ]
+  },
+  "location": "EUROPE-WEST1",
+  "locationType": "region",
+  "metageneration": "1",
+  "name": "data-engineering-i1-marketplace-group",
+  "projectNumber": "671557693556",
+  "satisfiesPZI": true,
+  "selfLink": "https://www.googleapis.com/storage/v1/b/data-engineering-i1-marketplace-group",
+  "softDeletePolicy": {
+    "effectiveTime": "2026-10-26T10:52:25.001Z",
+    "retentionDurationSeconds": "604800"
+  },
+  "storageClass": "STANDARD",
+  "timeCreated": "2026-10-26T10:52:25.001Z",
+  "updated": "2026-10-26T10:52:25.001Z"
+}

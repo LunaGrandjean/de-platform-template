@@ -1,0 +1,52 @@
+{
+  "rule": [
+    {
+      "action": {
+        "storageClass": "NEARLINE",
+        "type": "SetStorageClass"
+      },
+      "condition": {
+        "age": 30,
+        "matchesPrefix": [
+          "bronze/"
+        ],
+        "matchesStorageClass": [
+          "STANDARD"
+        ]
+      }
+    },
+    {
+      "action": {
+        "storageClass": "COLDLINE",
+        "type": "SetStorageClass"
+      },
+      "condition": {
+        "age": 90,
+        "matchesPrefix": [
+          "bronze/"
+        ],
+        "matchesStorageClass": [
+          "STANDARD",
+          "NEARLINE"
+        ]
+      }
+    },
+    {
+      "action": {
+        "storageClass": "ARCHIVE",
+        "type": "SetStorageClass"
+      },
+      "condition": {
+        "age": 365,
+        "matchesPrefix": [
+          "bronze/"
+        ],
+        "matchesStorageClass": [
+          "STANDARD",
+          "NEARLINE",
+          "COLDLINE"
+        ]
+      }
+    }
+  ]
+}

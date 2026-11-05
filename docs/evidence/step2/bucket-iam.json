@@ -1,0 +1,32 @@
+{
+  "bindings": [
+    {
+      "members": [
+        "projectEditor:data-engineering-i1",
+        "projectOwner:data-engineering-i1"
+      ],
+      "role": "roles/storage.legacyBucketOwner"
+    },
+    {
+      "members": [
+        "projectViewer:data-engineering-i1"
+      ],
+      "role": "roles/storage.legacyBucketReader"
+    },
+    {
+      "members": [
+        "projectEditor:data-engineering-i1",
+        "projectOwner:data-engineering-i1"
+      ],
+      "role": "roles/storage.legacyObjectOwner"
+    },
+    {
+      "members": [
+        "projectViewer:data-engineering-i1"
+      ],
+      "role": "roles/storage.legacyObjectReader"
+    }
+  ],
+  "etag": "CAE=",
+  "version": 1
+}
