@@ -12,7 +12,9 @@ arrival evidence, Silver will establish trusted records, and Gold will expose
 shared business measures. Step 2 has deployed and verified the raw GCS snapshot.
 Step 3 now has Python ingestion code and local fault-injection tests; live
 PostgreSQL/Kafka/Airbyte deployment is pending on a teammate's Docker machine.
-The warehouse and curated models remain planned.
+Step 4 has deployed BigQuery external tables over the Bronze snapshot and two
+native, month-partitioned sales tables (see [warehouse](warehouse.md)). The
+curated Silver and Gold models remain planned.
 
 ## Context and target diagram
 
@@ -45,10 +47,11 @@ flowchart LR
         consumer[Python Kafka + JSON Schema v1 - local tests passed]
     end
 
-    subgraph gcp[Google Cloud: europe-west1 - Bronze deployed, warehouse planned]
+    subgraph gcp[Google Cloud: europe-west1 - Bronze and Step 4 warehouse deployed]
         bronze[(GCS: data-engineering-i1-marketplace-group)]
         dlq[(GCS bronze/_dlq/: rejected events)]
-        raw[(BigQuery: selected native raw working tables - Step 4)]
+        ext[(BigQuery g07_bronze: 7 external tables - verified)]
+        raw[(BigQuery g07_warehouse: orders, order_lines, month partitions - verified)]
         silver[(BigQuery Silver: curated records - Lesson 5)]
         gold[(BigQuery Gold: daily-demand star - Lesson 5)]
     end
@@ -62,7 +65,8 @@ flowchart LR
     python -.-> bronze
     consumer -.->|raw bytes + provenance / UTC event_date| bronze
     consumer -.->|base64 original + reason + rejection time| dlq
-    bronze -.->|Planned reader: restricted warehouse loader| raw
+    bronze -->|Read in place, load 20261026T105159Z-2efcb86a| ext
+    ext -->|Typed copy, scripts/warehouse.py native| raw
     raw -.->|Type, reconcile and check| silver
     silver -.->|Aggregate shared measures| gold
     gold -.-> reports[Analysts / business reports]
@@ -88,7 +92,8 @@ analysis; it is not an additional source of sold units.
 | Airbyte connector | CDC plan, least-scope source SQL and catalog checker prepared; not configured/live verified | Docker operator: real seven-stream export, CDC jobs, Parquet metadata, secret exclusion and WAL measurements |
 | Custom SQL extractor | Implemented with psycopg, persistent cursor, bounded retries and local failure tests | Real PostgreSQL-to-GCS run and restart measurements |
 | Kafka consumer and DLQ | Implemented with JSON Schema, raw Parquet, manual commits and local rejection/replay tests; no live GCS DLQ objects claimed | Real broker: publish malformed event, inspect GCS DLQ and later valid event, then restart same group |
-| Native BigQuery working tables | Planned | Step 4: record dataset, selected tables, load jobs and query evidence |
+| BigQuery external Bronze tables | Verified 2026-11-05: `g07_bronze`, seven external tables over the Step 2 load; row counts equal the manifest | Add the Step 3 prefixes once live data lands |
+| Native BigQuery working tables | Verified 2026-11-05: `g07_warehouse.orders` and `order_lines`, month partitions with required partition filter, `order_lines` clustered by `p_id`; three costed queries recorded | Rebuild after each new completed load; re-measure clustering on live volumes |
 | Silver and Gold | Model design only | Lesson 5: implement and test business transformations |
 
 ## Bronze, Silver and Gold contracts
@@ -152,6 +157,7 @@ no such role, slot or key has been created by this Step 3 preparation.
 - [Step 3 ingestion jobs](../ingestion/README.md), [failure modes](ingestion-failure-modes.md)
   and [ingestion-mode ADR](adr/0003-ingestion-modes.md)
 - [Docker operator handoff](runbooks/step3-docker-handoff.md) and [local checks](evidence/step3/local-checks.json)
+- [Step 4 warehouse and costed queries](warehouse.md) and [warehouse ADR](adr/0004-warehouse-tables.md)
 
 Update this diagram and the implementation-status table after each step using
 the actual resource identifiers and verification results.

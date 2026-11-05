@@ -29,9 +29,10 @@ events. The platform targets daily units sold by product and country.
 | Omar Abdellatif | [@abdellatifomar61-ship-it](https://github.com/abdellatifomar61-ship-it) | To be documented |
 | Malek Saoudi | [@Msaoudi115](https://github.com/Msaoudi115) | To be documented |
 | Anas Mossad | [@realay04](https://github.com/realay04) | To be documented |
+| Emile Gadenne | [@egadenne-ai](https://github.com/egadenne-ai) | Step 4 BigQuery warehouse, costed queries and ADR 0004 |
 
-The cohort and group identifier have not been provided yet. Add them before
-submitting the group repository.
+We are group 7 (`g07`). The cohort identifier has not been provided yet. Add it
+before submitting the group repository.
 
 ### Step 1: Start the Platform
 
@@ -113,7 +114,23 @@ broker and connector validation.
 No Step 3 service-account/HMAC key, CDC slot or cloud IAM grant is created by the
 Python preparation. The operator must provide the actual connector settings,
 successful jobs, GCS/DLQ objects and WAL/key-cleanup evidence before completion.
-Step 4 will add the warehouse after the group agrees the source handover.
+
+### Step 4: SQL Warehouse
+
+Bronze stays in the bucket and is read through seven BigQuery external tables
+in `g07_bronze`. The two sales tables are copied, typed, into `g07_warehouse`,
+partitioned by month and clustered by product. Measured with the cache off, a
+month of daily demand reads 49x fewer bytes natively than from Bronze, and
+filters that cannot prune are rejected before they run. The native tables cover
+the Step 2 snapshot; Step 3's live paths are not included yet.
+
+| Deliverable | Content |
+|---|---|
+| [Warehouse and costed queries](docs/warehouse.md) | Datasets, tables, reproduction commands and three queries measured in bytes and dollars |
+| [Warehouse ADR](docs/adr/0004-warehouse-tables.md) | External versus native tables, partition grain, clustering and the empty-column workaround |
+| [Warehouse script](scripts/warehouse.py) | `external`, `native` and `measure` commands, with row-count and cast prechecks |
+| [Evidence](docs/evidence/step4/) | External and native table metadata, job IDs and query measurements |
+| [Dictionary](docs/data-dictionary.md) and [architecture](docs/architecture.md) | Warehouse schemas and updated status |
 
 ## Start it
 

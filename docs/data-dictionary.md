@@ -213,6 +213,39 @@ before declaring the connector dictionary complete. The configured catalog
 checker validates source fields/modes; it does not manufacture Airbyte metadata
 or certify that a destination has produced those fields.
 
+## Step 4: BigQuery tables
+
+External tables in `g07_bronze` expose the seven Bronze tables above with the
+same column names, all `STRING`, for load `20261026T105159Z-2efcb86a` only. The
+empty-named CSV index column is not declared, because BigQuery rejects it; it
+stays in the Parquet files. Native tables in `g07_warehouse` are typed copies
+of the two sales tables; no row is removed or deduplicated
+([ADR 0004](adr/0004-warehouse-tables.md)).
+
+`g07_warehouse.orders`: 222,644 rows, partitioned by month of `order_date`.
+
+| Column | BigQuery type | From Bronze | Personal data? |
+|---|---|---|---|
+| `order_id` | INT64 | `SAFE_CAST(order_id AS INT64)` | Yes: linkable transaction ID |
+| `buyer_id` | STRING | `buyer_id`, empty string as NULL | Yes: pseudonymous buyer ID |
+| `discount_id` | INT64 | `SAFE_CAST(discount_id AS INT64)` | No |
+| `payment_id` | INT64 | `SAFE_CAST(payment_id AS INT64)` | Yes: linkable payment ID |
+| `order_date` | DATE | `SAFE_CAST(order_date AS DATE)`; partition column | No direct identifier; purchase attribute |
+
+`g07_warehouse.order_lines`: 408,560 rows, partitioned by month of
+`order_date`, clustered by `p_id`.
+
+| Column | BigQuery type | From Bronze | Personal data? |
+|---|---|---|---|
+| `order_id` | INT64 | `order_items.order_id` | Yes: linkable transaction ID |
+| `p_id` | STRING | `order_items.p_id`; clustering column | No |
+| `qty` | INT64 | `order_items.qty` | No direct identifier; purchase attribute |
+| `price_at_purchase` | NUMERIC | `order_items.price_at_purchase` | No direct identifier; purchase attribute |
+| `order_date` | DATE | Parent `orders.order_date`, joined on `order_id`; partition column | No direct identifier; purchase attribute |
+
+Before the build, 0 values failed these casts and 0 order lines lacked a parent
+order; the checks are in `docs/evidence/step4/native-tables.json`.
+
 ## References
 
 - [Baseline schema](../db/migrations/20260915120000_baseline.sql)
