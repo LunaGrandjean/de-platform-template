@@ -159,15 +159,147 @@ def native(client: bigquery.Client) -> None:
         "prechecks": checks, "tables": built})
 
 
+PRICE_PER_TIB_USD = 7.50  # BigQuery on-demand, europe-west1 (first TiB each month free)
+
+# Three questions, each asked several ways. {br}/{wh} are the two datasets;
+# {rare}/{best} are product IDs chosen from the data (see pick_products).
+MEASURED_QUERIES = {
+    "q1_daily_units_one_month": {
+        "question": "Units sold per product and day in August 2026 (the daily-demand fact, one month)",
+        "variants": {
+            "bronze_external": """
+SELECT o.order_date, i.p_id, SUM(SAFE_CAST(i.qty AS INT64)) AS units
+FROM `{br}.order_items` AS i JOIN `{br}.orders` AS o USING (order_id)
+WHERE o.order_date >= '2026-08-01' AND o.order_date < '2026-09-01'
+GROUP BY 1, 2""",
+            "native_range_filter": """
+SELECT order_date, p_id, SUM(qty) AS units
+FROM `{wh}.order_lines`
+WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01'
+GROUP BY 1, 2""",
+            "native_format_date_filter": """
+SELECT order_date, p_id, SUM(qty) AS units
+FROM `{wh}.order_lines`
+WHERE FORMAT_DATE('%Y-%m', order_date) = '2026-08'
+GROUP BY 1, 2""",
+            "native_subquery_filter": """
+SELECT order_date, p_id, SUM(qty) AS units
+FROM `{wh}.order_lines`
+WHERE order_date IN (SELECT DATE '2026-08-01' + n FROM UNNEST(GENERATE_ARRAY(0, 30)) AS n)
+GROUP BY 1, 2""",
+        },
+    },
+    "q2_one_product_one_year": {
+        "question": "Monthly units of one product over the last twelve months (clustering by p_id)",
+        "variants": {
+            "rare_product": """
+SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units
+FROM `{wh}.order_lines`
+WHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01' AND p_id = '{rare}'
+GROUP BY 1""",
+            "best_seller": """
+SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units
+FROM `{wh}.order_lines`
+WHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01' AND p_id = '{best}'
+GROUP BY 1""",
+            "rare_product_bronze_external": """
+SELECT DATE_TRUNC(SAFE_CAST(o.order_date AS DATE), MONTH) AS month, SUM(SAFE_CAST(i.qty AS INT64)) AS units
+FROM `{br}.order_items` AS i JOIN `{br}.orders` AS o USING (order_id)
+WHERE o.order_date >= '2025-09-01' AND o.order_date < '2026-09-01' AND i.p_id = '{rare}'
+GROUP BY 1""",
+        },
+    },
+    "q3_orders_per_month_one_quarter": {
+        "question": "Orders per month in Q3 2026, and what SELECT * with LIMIT costs",
+        "variants": {
+            "bronze_external": """
+SELECT SUBSTR(order_date, 1, 7) AS month, COUNT(*) AS orders
+FROM `{br}.orders`
+WHERE order_date >= '2026-07-01' AND order_date < '2026-10-01'
+GROUP BY 1""",
+            "native_one_column": """
+SELECT DATE_TRUNC(order_date, MONTH) AS month, COUNT(*) AS orders
+FROM `{wh}.orders`
+WHERE order_date >= DATE '2026-07-01' AND order_date < DATE '2026-10-01'
+GROUP BY 1""",
+            "native_select_star_limit_10": """
+SELECT *
+FROM `{wh}.orders`
+WHERE order_date >= DATE '2026-07-01' AND order_date < DATE '2026-10-01'
+LIMIT 10""",
+        },
+    },
+}
+
+
+def pick_products(client: bigquery.Client, names: dict) -> dict:
+    """The best seller and a product sold in exactly one month of the window."""
+    sql = """
+WITH per_product AS (
+  SELECT p_id, SUM(qty) AS units, COUNT(DISTINCT DATE_TRUNC(order_date, MONTH)) AS months
+  FROM `{wh}.order_lines`
+  WHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'
+  GROUP BY p_id)
+SELECT
+  (SELECT p_id FROM per_product ORDER BY units DESC, p_id LIMIT 1) AS best,
+  (SELECT p_id FROM per_product WHERE months = 1 ORDER BY p_id LIMIT 1) AS rare,
+  (SELECT MAX(months) FROM per_product) AS months_in_window"""
+    row = next(iter(client.query(sql.format(**names), job_config=bigquery.QueryJobConfig(
+        maximum_bytes_billed=MAX_BYTES_BILLED)).result()))
+    return dict(row)
+
+
+def measure_one(client: bigquery.Client, sql: str) -> dict:
+    """Dry run first (free), then a real run with the cache off."""
+    result: dict = {"sql": sql.strip()}
+    try:
+        dry = client.query(sql, job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False))
+        result["dry_run_bytes"] = dry.total_bytes_processed
+        job = client.query(sql, job_config=bigquery.QueryJobConfig(
+            use_query_cache=False, maximum_bytes_billed=MAX_BYTES_BILLED))
+        rows = list(job.result())
+        result.update({
+            "status": "ran", "rows_returned": len(rows), "job_id": job.job_id,
+            "bytes_processed": job.total_bytes_processed,
+            "bytes_billed": job.total_bytes_billed,
+            "cache_hit": job.cache_hit,
+            "usd_at_on_demand_price": round(job.total_bytes_billed / 2**40 * PRICE_PER_TIB_USD, 6),
+        })
+    except Exception as error:  # a rejected query is a result worth recording
+        result.update({"status": "rejected", "error": str(error).splitlines()[0][:300]})
+    return result
+
+
+def measure(client: bigquery.Client) -> None:
+    names = {"br": f"{PROJECT}.{BRONZE_DATASET}", "wh": f"{PROJECT}.{WAREHOUSE_DATASET}"}
+    products = pick_products(client, names)
+    print("Products:", products, flush=True)
+    results = {}
+    for key, spec in MEASURED_QUERIES.items():
+        results[key] = {"question": spec["question"], "variants": {}}
+        for variant, sql in spec["variants"].items():
+            outcome = measure_one(client, sql.format(**names, **products))
+            results[key]["variants"][variant] = outcome
+            shown = outcome.get("bytes_processed", outcome.get("error"))
+            print(f"{key} / {variant}: {outcome['status']}, {shown}", flush=True)
+    write_json(EVIDENCE_DIR / "costed-queries.json", {
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(),
+        "price_per_tib_usd": PRICE_PER_TIB_USD, "products": products,
+        "note": "Real runs with use_query_cache=False. bytes_billed includes BigQuery's 10 MB minimum per table referenced.",
+        "queries": results})
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["external", "native"])
+    parser.add_argument("command", choices=["external", "native", "measure"])
     args = parser.parse_args()
     client = bigquery.Client(project=PROJECT, location=LOCATION)
     if args.command == "external":
         external(client, json.loads(MANIFEST.read_text(encoding="utf-8")))
-    else:
+    elif args.command == "native":
         native(client)
+    else:
+        measure(client)
 
 
 if __name__ == "__main__":
