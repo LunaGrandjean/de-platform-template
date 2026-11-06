@@ -1,0 +1,85 @@
+{
+  "counts": {
+    "daily_collapse_ratio": 1.1444866813639942,
+    "monthly_collapse_ratio": 2.474007060633035,
+    "order_lines": 408560,
+    "product_days": 356981,
+    "product_months": 165141,
+    "total_units": 1386640
+  },
+  "limitation": "Independent source measurement only; see materialization.json for BigQuery MV/job verification",
+  "load_id": "20261026T105159Z-2efcb86a",
+  "method": "Read selected columns of generation-pinned GCS Parquet; Python distinct-key sets",
+  "source_objects": [
+    {
+      "columns_read": [
+        "order_id",
+        "order_date"
+      ],
+      "generation": 1793011965096829,
+      "object": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "order_date"
+      ],
+      "generation": 1793011965521617,
+      "object": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "order_date"
+      ],
+      "generation": 1793011965854978,
+      "object": "bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "p_id",
+        "qty"
+      ],
+      "generation": 1793011966102714,
+      "object": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00000.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "p_id",
+        "qty"
+      ],
+      "generation": 1793011966363347,
+      "object": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00001.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "p_id",
+        "qty"
+      ],
+      "generation": 1793011966696985,
+      "object": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00002.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "p_id",
+        "qty"
+      ],
+      "generation": 1793011966939039,
+      "object": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00003.parquet"
+    },
+    {
+      "columns_read": [
+        "order_id",
+        "p_id",
+        "qty"
+      ],
+      "generation": 1793011967148411,
+      "object": "bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/part-00004.parquet"
+    }
+  ],
+  "verified_at_utc": "2026-11-06T10:25:51.633329+00:00"
+}

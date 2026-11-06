@@ -1,0 +1,12 @@
+{
+  "looked_up_at_utc": "2026-11-06T10:27:58.630187+00:00",
+  "url": "https://cloud.google.com/bigquery/pricing",
+  "region": "europe-west1",
+  "currency": "USD",
+  "standard_payg_per_slot_hour": 0.044,
+  "on_demand_per_tib_course_rate": 7.5,
+  "method": "Read official page embedded regional pricing data; Belgium entry in Standard Edition table. Default visible Iowa hourly rate is not used.",
+  "page_sha256": "94169e02ba388eb0a40c12f6a67b8d94eab432278e171ea4bf70fc5198282123",
+  "observed_regional_hourly_string": "$0.044 / 1 hour",
+  "capacity_purchased": false
+}

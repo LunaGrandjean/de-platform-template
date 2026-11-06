@@ -59,7 +59,7 @@ flowchart LR
         dlq[(GCS bronze/_dlq/: rejected events)]
         ext[(BigQuery g07_bronze: snapshot and selected live external tables)]
         raw[(BigQuery g07_warehouse: native orders and order_lines)]
-        mv[(Daily-demand materialised view: provisional performance aggregate)]
+        mv[(Daily-demand MV: SQL prepared, live verification pending)]
         silver[(BigQuery Silver: curated records - Lesson 5)]
         gold[(BigQuery Gold: daily-demand star - Lesson 5)]
     end
@@ -77,7 +77,7 @@ flowchart LR
     cdc_sink -->|raw envelopes + Kafka provenance| bronze
     bronze -->|Pinned snapshot and separate live prefixes| ext
     ext -->|Typed snapshot only| raw
-    raw -->|Group by product and day| mv
+    raw -.->|Group by product and day, pending live validation| mv
     raw -.->|Type, reconcile and check| silver
     silver -.->|Aggregate shared measures| gold
     gold -.-> reports[Analysts / business reports]

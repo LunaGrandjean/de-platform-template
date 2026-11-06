@@ -12,19 +12,23 @@ Uses Application Default Credentials and the BigQuery Python SDK; no `bq` or
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from google.cloud import bigquery
+from google.api_core.exceptions import BadRequest, Forbidden
 
 PROJECT = "data-engineering-i1"
 LOCATION = "europe-west1"
 BUCKET = "data-engineering-i1-marketplace-group"
 BRONZE_DATASET = "g07_bronze"
 WAREHOUSE_DATASET = "g07_warehouse"
-MANIFEST = Path("docs/evidence/step2/landing-manifest.json")
-EVIDENCE_DIR = Path("docs/evidence/step4")
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = ROOT / "docs/evidence/step2/landing-manifest.json"
+EVIDENCE_DIR = ROOT / "docs/evidence/step4"
 MAX_BYTES_BILLED = 1_000_000_000  # 1 GB: far above this dataset, far below a mistake
 
 LABELS = {"group": "g07", "layer": "", "step": "l04"}
@@ -202,11 +206,10 @@ def native(client: bigquery.Client) -> None:
     ensure_dataset(client, WAREHOUSE_DATASET, "warehouse",
                    "Group 7: native typed working tables loaded from Bronze (Step 4)")
     names = {"br": f"{PROJECT}.{BRONZE_DATASET}", "wh": f"{PROJECT}.{WAREHOUSE_DATASET}"}
-    capped = bigquery.QueryJobConfig(maximum_bytes_billed=MAX_BYTES_BILLED)
+    capped = bigquery.QueryJobConfig(maximum_bytes_billed=MAX_BYTES_BILLED, use_query_cache=False)
     checks = dict(next(iter(client.query(PRECHECK_SQL.format(**names), job_config=capped).result())))
     print("Prechecks:", checks, flush=True)
-    if checks["duplicate_order_ids"]:
-        raise ValueError("order_id is not unique in Bronze orders; the order_lines join would multiply rows")
+    validate_prechecks(checks)
     built = []
     for name, sql in NATIVE_SQL.items():
         job = client.query(sql.format(**names), job_config=capped)
@@ -223,6 +226,22 @@ def native(client: bigquery.Client) -> None:
     write_json(EVIDENCE_DIR / "native-tables.json", {
         "verified_at_utc": datetime.now(timezone.utc).isoformat(),
         "prechecks": checks, "tables": built})
+
+
+def validate_prechecks(checks: dict) -> None:
+    """Fail closed before replacing either working table; keep bad data in Bronze."""
+    expected = {"duplicate_order_ids", "unparsed_dates", "unparsed_order_ids",
+                "unparsed_qty", "unparsed_prices", "orphan_lines"}
+    if set(checks) != expected:
+        raise ValueError("Unexpected or incomplete warehouse precheck results")
+    failures = {name: value for name, value in checks.items() if value != 0}
+    if failures:
+        raise ValueError(f"Warehouse prechecks failed; no tables replaced: {failures}")
+
+
+def processed_cost(byte_count: int) -> float:
+    """Course estimate before the free allowance, independent of billing minima."""
+    return round(byte_count / 2**40 * PRICE_PER_TIB_USD, 12)
 
 
 PRICE_PER_TIB_USD = 7.50  # BigQuery on-demand, europe-west1 (first TiB each month free)
@@ -329,10 +348,17 @@ def measure_one(client: bigquery.Client, sql: str) -> dict:
             "bytes_processed": job.total_bytes_processed,
             "bytes_billed": job.total_bytes_billed,
             "cache_hit": job.cache_hit,
-            "usd_at_on_demand_price": round(job.total_bytes_billed / 2**40 * PRICE_PER_TIB_USD, 6),
+            "materialized_view_statistics": job.to_api_repr().get("statistics", {}).get("query", {}).get("materializedViewStatistics"),
+            "usd_at_on_demand_price": processed_cost(job.total_bytes_processed),
+            "usd_from_billed_bytes_before_allowance": processed_cost(job.total_bytes_billed),
         })
-    except Exception as error:  # a rejected query is a result worth recording
-        result.update({"status": "rejected", "error": str(error).splitlines()[0][:300]})
+    except BadRequest as error:
+        # Only an expected pruning rejection is a benchmark outcome. Auth,
+        # missing tables and all other failures must fail the command.
+        if "partition elimination" not in str(error):
+            raise
+        result.update({"status": "rejected", "error": str(error),
+                       "error_details": error.errors})
     return result
 
 
@@ -351,13 +377,155 @@ def measure(client: bigquery.Client) -> None:
     write_json(EVIDENCE_DIR / "costed-queries.json", {
         "measured_at_utc": datetime.now(timezone.utc).isoformat(),
         "price_per_tib_usd": PRICE_PER_TIB_USD, "products": products,
-        "note": "Real runs with use_query_cache=False. bytes_billed includes BigQuery's 10 MB minimum per table referenced.",
+        "note": "Real runs with use_query_cache=False. Course cost uses processed bytes; billed-byte cost is separate. Both are before the shared monthly allowance.",
         "queries": results})
+
+
+def materialize(client: bigquery.Client) -> None:
+    """Build the provisional daily MV and measure daily and monthly collapse."""
+    names = {"wh": f"{PROJECT}.{WAREHOUSE_DATASET}"}
+    sql = (ROOT / "warehouse/daily-demand.sql").read_text(encoding="utf-8")
+    config = bigquery.QueryJobConfig(use_query_cache=False, maximum_bytes_billed=MAX_BYTES_BILLED)
+    create = client.query(sql, job_config=config)
+    create.result()
+    refresh = client.query(f"CALL BQ.REFRESH_MATERIALIZED_VIEW('{names['wh']}.daily_demand')",
+                           job_config=config)
+    refresh.result()
+    collapse_sql = f"""
+SELECT COUNT(*) AS order_lines,
+  COUNT(DISTINCT STRUCT(p_id, order_date)) AS product_days,
+  COUNT(DISTINCT STRUCT(p_id, DATE_TRUNC(order_date, MONTH))) AS product_months
+FROM `{names['wh']}.order_lines`
+WHERE order_date >= DATE '0001-01-01'
+"""
+    job = client.query(collapse_sql, job_config=config)
+    counts = dict(next(iter(job.result())))
+    result = {**counts,
+              "daily_collapse_ratio": counts["order_lines"] / counts["product_days"],
+              "monthly_collapse_ratio": counts["order_lines"] / counts["product_months"]}
+    variants = {
+        "base": f"SELECT order_date, p_id, SUM(qty) AS units FROM `{names['wh']}.order_lines` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01' GROUP BY 1, 2",
+        "materialized": f"SELECT order_date, p_id, units FROM `{names['wh']}.daily_demand` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01'",
+    }
+    measured = {name: measure_one(client, query) for name, query in variants.items()}
+    # Compare actual results too; a count alone would miss changed totals.
+    rows = [sorted(tuple(row) for row in client.query(query, job_config=config).result())
+            for query in variants.values()]
+    if rows[0] != rows[1]:
+        raise ValueError("Daily-demand MV results do not match the base aggregation")
+    table = client.get_table(f"{names['wh']}.daily_demand")
+    write_json(EVIDENCE_DIR / "materialization.json", {
+        "verified_at_utc": datetime.now(timezone.utc).isoformat(),
+        "counts": result, "collapse_sql": collapse_sql.strip(), "collapse_job_id": job.job_id,
+        "create_job_id": create.job_id, "refresh_job_id": refresh.job_id,
+        "table": str(table.reference), "table_type": table.table_type,
+        "enable_refresh": table.mview_enable_refresh,
+        "last_refresh_time": table.mview_last_refresh_time,
+        "result_equality_verified": True, "queries": measured})
+    print(json.dumps(result), flush=True)
+
+
+def verify_cap(client: bigquery.Client) -> None:
+    """Trip a deliberately low cap on a small, partition-filtered native query."""
+    sql = f"""SELECT p_id, SUM(qty) AS units
+FROM `{PROJECT}.{WAREHOUSE_DATASET}.order_lines`
+WHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'
+GROUP BY p_id"""
+    threshold = 1_048_576
+    dry = client.query(sql, job_config=bigquery.QueryJobConfig(dry_run=True, use_query_cache=False))
+    if not threshold < dry.total_bytes_processed <= MAX_BYTES_BILLED:
+        raise ValueError("Cap probe must be larger than 1 MiB and smaller than the normal 1 GB guard")
+    job = None
+    try:
+        job = client.query(sql, job_config=bigquery.QueryJobConfig(
+            use_query_cache=False, maximum_bytes_billed=threshold))
+        job.result()
+    except (BadRequest, Forbidden) as error:
+        if not any(term in str(error).lower() for term in ["maximum bytes billed", "bytes billed limit", "limit for bytes billed", "billing tier"]):
+            raise
+        write_json(EVIDENCE_DIR / "cost-cap.json", {
+            "verified_at_utc": datetime.now(timezone.utc).isoformat(),
+            "sql": sql, "normal_maximum_bytes_billed": MAX_BYTES_BILLED,
+            "probe_maximum_bytes_billed": threshold,
+            "dry_run_bytes_processed": dry.total_bytes_processed,
+            "use_query_cache": False, "status": "rejected_by_cost_cap",
+            "job_id": job.job_id if job else None,
+            "actual_error": str(error), "error_details": error.errors})
+        print("Cost-cap probe rejected as expected", flush=True)
+        return
+    raise ValueError("Cap probe unexpectedly succeeded; no successful cap evidence written")
+
+
+def tune(client: bigquery.Client) -> None:
+    """Compare the same query on monthly tables with and without clustering.
+
+    The isolated baseline expires after one hour and is deleted in finally.
+    Filter on raw price as well so a daily SUM(qty) MV cannot answer the query.
+    """
+    wh = f"{PROJECT}.{WAREHOUSE_DATASET}"
+    baseline = f"{wh}._step4_unclustered_{uuid.uuid4().hex[:12]}"
+    config = bigquery.QueryJobConfig(use_query_cache=False, maximum_bytes_billed=MAX_BYTES_BILLED)
+    products = pick_products(client, {"wh": wh})
+    created = False
+    try:
+        create = client.query(f"""CREATE TABLE `{baseline}`
+PARTITION BY DATE_TRUNC(order_date, MONTH)
+OPTIONS (require_partition_filter=TRUE,
+ expiration_timestamp=TIMESTAMP_ADD(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR))
+AS SELECT * FROM `{wh}.order_lines` WHERE order_date >= DATE '0001-01-01'""", job_config=config)
+        # Even a timeout after submission may have created the table. The
+        # unique name and expiry limit cleanup to this command's own object.
+        created = True
+        create.result()
+        results = {}
+        for key in ["rare", "best", "no_product_filter"]:
+            variants = {}
+            product_filter = f"AND p_id = '{products[key]}'" if key in products else ""
+            for name, table in [("before_unclustered", baseline), ("after_clustered", f"{wh}.order_lines")]:
+                sql = f"""SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units
+FROM `{table}`
+WHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'
+  {product_filter} AND price_at_purchase >= 0
+GROUP BY 1"""
+                variants[name] = measure_one(client, sql)
+            before = variants["before_unclustered"]["bytes_processed"]
+            after = variants["after_clustered"]["bytes_processed"]
+            results[key] = {"product_id": products.get(key), "variants": variants,
+                            "before_over_after_ratio": before / after if after else None}
+        write_json(EVIDENCE_DIR / "controlled-tuning.json", {
+            "verified_at_utc": datetime.now(timezone.utc).isoformat(),
+            "build_job_id": create.job_id, "use_query_cache": False,
+            "change": "same typed rows, monthly partitions and price predicate; only p_id clustering differs",
+            "queries": results})
+    finally:
+        if created:
+            client.delete_table(baseline, not_found_ok=True)
+
+
+def complete(client: bigquery.Client) -> None:
+    """Run outstanding live checks on existing tables, without rebuilding them."""
+    names = {"br": f"{PROJECT}.{BRONZE_DATASET}"}
+    config = bigquery.QueryJobConfig(use_query_cache=False, maximum_bytes_billed=MAX_BYTES_BILLED)
+    checks = dict(next(iter(client.query(PRECHECK_SQL.format(**names), job_config=config).result())))
+    validate_prechecks(checks)
+    verify_cap(client)
+    tune(client)
+    measure(client)
+    materialize(client)
+    write_json(EVIDENCE_DIR / "validation-status.json", {
+        "verified_at_utc": datetime.now(timezone.utc).isoformat(),
+        "status": "live_step4_checks_passed", "project": PROJECT, "location": LOCATION,
+        "prechecks": checks,
+        "cost_cap_verified": True, "controlled_tuning_measured": True,
+        "daily_materialized_view_verified": True, "three_queries_remeasured": True,
+        "warehouse_script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "evidence": ["cost-cap.json", "controlled-tuning.json", "costed-queries.json", "materialization.json"],
+        "scope": "Existing snapshot warehouse only; no Docker rerun, Bronze write or source/IAM change"})
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["external", "external-step3", "native", "measure"])
+    parser.add_argument("command", choices=["external", "external-step3", "native", "measure", "materialize", "verify-cap", "tune", "complete"])
     args = parser.parse_args()
     client = bigquery.Client(project=PROJECT, location=LOCATION)
     if args.command == "external":
@@ -366,6 +534,14 @@ def main() -> None:
         external_step3(client)
     elif args.command == "native":
         native(client)
+    elif args.command == "materialize":
+        materialize(client)
+    elif args.command == "verify-cap":
+        verify_cap(client)
+    elif args.command == "tune":
+        tune(client)
+    elif args.command == "complete":
+        complete(client)
     else:
         measure(client)
 

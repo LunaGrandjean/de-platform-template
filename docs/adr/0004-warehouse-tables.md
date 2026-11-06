@@ -69,10 +69,10 @@ by month** of `order_date` with `require_partition_filter`, and `order_lines`
 - **Easier:** period questions read only their months; an unfiltered or
   non-pruning query fails at no charge; all queries carry a 1 GB
   `maximum_bytes_billed` cap. Storage is about 33 MB, inside the free 10 GiB.
-- **Clustering is modest here:** it cut a rare product's year from 3.8 MB to
-  1.6 MB, but a best seller sold every month still reads all 3.8 MB. It is kept
-  because it costs nothing and its benefit grows with partition size; it will
-  be re-measured when Step 3's live data arrives.
+- **Clustering needs a controlled comparison:** the rare and best-selling
+  products are different queries, not a before/after layout test. The
+  `tune` command compares each same query against an expiring unclustered
+  monthly copy; keep unchanged results too. See [tuning](../warehouse-tuning.md).
 - **At this scale the bill is flat:** BigQuery bills at least 10 MB per table
   referenced, so every query above was billed 10 or 20 MB (about $0.0001). The
   ratios, not the dollars, are what carry to larger data.
@@ -80,6 +80,11 @@ by month** of `order_date` with `require_partition_filter`, and `order_lines`
   (`uv run scripts/warehouse.py native`) after each new completed Bronze load,
   until Step 7 schedules it. Cost estimates for anything reading external tables
   need a real run, because dry runs report 0 bytes for them.
-- **Out of scope:** duplicate business orders, country mapping and the
-  daily-demand star are Silver and Gold work (Lesson 5). No materialised view
-  was built: the product-by-day grain barely aggregates.
+- **Provisional daily aggregate:** [MV SQL](../../warehouse/daily-demand.sql)
+  keeps the required product/day grain. A generation-pinned GCS read measured
+  408,560 lines / 356,981 product-days = 1.144487x; product/month gives
+  2.474007x but loses daily detail. Keep the daily view as a modest performance
+  aggregate; business reconciliation and country mapping remain Lesson 5.
+  Actual MV/cap verification is tracked in [validation status](../evidence/step4/validation-status.json).
+- **Pricing and incidents:** see the [pricing ADR](0004-warehouse-pricing.md)
+  for on-demand/capacity crossover and the [slow-query runbook](../runbooks/slow-query.md).

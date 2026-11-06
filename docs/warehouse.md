@@ -1,5 +1,9 @@
 # Step 4: BigQuery warehouse and three costed queries
 
+See [warehouse tuning](warehouse-tuning.md) for the completed review changes,
+MV trade-off, processed-byte costs, live-check commands and current status.
+The tables below preserve Emile's original 2026-11-05 measurements.
+
 ## What exists
 
 All resources are in project `data-engineering-i1`, region `europe-west1`, and
@@ -39,7 +43,9 @@ on it is required. Counts below were checked against the Parquet footers on
   2,287 `order_placed` events from 2026-09-15 to 2026-09-24. It describes
   behaviour, not sales.
 - Not exposed yet: `bronze/kafka/clickstream-step3-check/` (the malformed-event
-  test) and `bronze/cdc/`, whose file layout may still change.
+  test) and `bronze/cdc/`, which preserves raw Debezium envelopes and tombstones. Its seven-table
+  implementation and live evidence are now integrated from Malek's branch;
+  Lesson 5 will reconcile it before native sales loading.
 - The native tables are still built from the snapshot only.
 
 ## Reproduce
@@ -63,7 +69,9 @@ bucket. Every query runs with `maximum_bytes_billed` = 1 GB.
 Measured on 2026-11-05 with the query cache off. Bytes are what BigQuery
 reported as processed; the full SQL, job IDs, dry-run bytes and billed bytes are
 in [costed-queries.json](evidence/step4/costed-queries.json). Dollars use the
-on-demand price of $7.50 per TiB.
+on-demand price of $7.50 per TiB. The corrected course estimate uses
+**processed** bytes; billed-byte cost remains separate. See the three
+question/cost table in [warehouse tuning](warehouse-tuning.md).
 
 ### Q1. Units sold per product and day, August 2026
 
@@ -91,9 +99,10 @@ product sold in only one month (`0990995119`).
 | Best seller, native | 3,789,632 | 3,789,632 |
 | Rare product, Bronze external tables | 0 (not estimable) | 8,879,045 |
 
-The dry run gives the partition-pruned upper bound; clustering then skipped
-blocks for the rare product only (2.3x less). The best seller appears in every
-block, so nothing is skipped.
+The dry run gives an upper bound. These are different product predicates,
+so their difference alone is not a controlled clustering benchmark. The
+`tune` command now compares each same query against an unclustered monthly
+copy; keep a 1.0x outcome when no blocks can be skipped.
 
 ### Q3. Orders per month, July to September 2026
 

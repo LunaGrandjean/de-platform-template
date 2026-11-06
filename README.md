@@ -147,10 +147,18 @@ in `g07_bronze`. The two sales tables are copied, typed, into `g07_warehouse`,
 partitioned by month and clustered by product. Measured with the cache off, a
 month of daily demand reads 49x fewer bytes natively than from Bronze, and
 filters that cannot prune are rejected before they run. The native tables cover
-the Step 2 snapshot; Step 3's live paths are not included yet.
+the Step 2 snapshot; the Python and main clickstream paths are separate
+external tables. Malek's Debezium implementation and live evidence are included.
+Review fixes add the MV SQL, corrected costs, fail-closed prechecks, pricing
+comparison and incident runbook. See [live validation status](docs/evidence/step4/validation-status.json)
+for outstanding BigQuery checks; a local test is not cloud deployment proof.
 
 | Deliverable | Content |
 |---|---|
+| [Tuning and cap verification](docs/warehouse-tuning.md) | Processed-byte comparisons, aggregation ratios and reproducible live checks |
+| [Daily-demand MV](warehouse/daily-demand.sql) | Provisional product/day aggregation; deployment tracked in evidence |
+| [Pricing decision](docs/adr/0004-warehouse-pricing.md) | Workload assumptions, capacity break-even and review thresholds |
+| [Slow-query runbook](docs/runbooks/slow-query.md) | Ordered investigation, evidence and escalation |
 | [Warehouse and costed queries](docs/warehouse.md) | Datasets, tables, reproduction commands and three queries measured in bytes and dollars |
 | [Warehouse ADR](docs/adr/0004-warehouse-tables.md) | External versus native tables, partition grain, clustering and the empty-column workaround |
 | [Warehouse script](scripts/warehouse.py) | `external`, `native` and `measure` commands, with row-count and cast prechecks |
@@ -199,9 +207,9 @@ From another container on your machine (Airbyte, Airflow, dbt), the database is
 `host.docker.internal:5432` and Kafka is `host.docker.internal:29092`.
 
 PostgreSQL runs with `wal_level=logical`, so change data capture works: create a
-replication slot, or point Airbyte or Debezium at it. A forgotten slot is
-dropped once it holds back 512 MB of write-ahead log, so it cannot fill your
-disk.
+replication slot, or point Airbyte or Debezium at it. A slot can become invalid when retained WAL exceeds the 512 MB setting;
+it is not automatically dropped. Monitor the group slot and coordinate any
+resnapshot rather than dropping it during routine operation.
 
 ## What is in here
 
