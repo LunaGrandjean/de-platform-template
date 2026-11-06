@@ -1,0 +1,126 @@
+version: 2
+
+# Gold: a star schema. Each fact declares its grain in English in its
+# description, and carries a uniqueness test on exactly the columns that grain
+# names. A grain with no test is a claim nobody checks. If one of these fails,
+# fix the model; do not remove the test.
+
+models:
+  - name: dim_product
+    description: >
+      One row per catalogue product (42,858). GRAIN: (p_id). Carries a review
+      summary (count and average rating), aggregated before the join so a product
+      is never repeated.
+    columns:
+      - name: p_id
+        data_tests: [unique, not_null]
+      - name: p_name
+        description: "NULL for the 6 products with no name in the source. The test warns on those 6 and fails if a seventh appears."
+        data_tests:
+          - not_null:
+              config:
+                warn_if: ">0"
+                error_if: ">6"
+      - name: review_count
+        data_tests: [not_null]
+
+  - name: dim_country
+    description: "One row per market (six). GRAIN: (country_code)."
+    columns:
+      - name: country_code
+        data_tests: [unique, not_null]
+
+  - name: dim_date
+    description: >
+      One row per calendar day from 2023-01-01 to 2026-12-31, including days with
+      no sale. GRAIN: (date_day).
+    columns:
+      - name: date_day
+        data_tests: [unique, not_null]
+
+  - name: fct_order_items
+    description: >
+      One row per order line of a real order, after the legacy duplicate orders
+      are removed (111,322 orders). GRAIN: (order_id, p_id). The country is the
+      one of the buyer's default address. Lines priced 0.00 are kept and flagged.
+      gross_amount_eur is quantity times price at purchase, before discounts and
+      without returns.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id, p_id]
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: p_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: p_id
+      - name: order_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: country_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_country')
+                field: country_code
+      - name: quantity
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true
+      - name: unit_price_eur
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                inclusive: true
+
+  - name: fct_daily_demand
+    description: >
+      One row per product per country per day on which it sold. GRAIN:
+      (p_id, country_code, order_date). Days without a sale have no row. Units,
+      distinct orders and gross revenue in EUR (quantity times price at purchase,
+      before discounts, without returns).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [p_id, country_code, order_date]
+    columns:
+      - name: p_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: p_id
+      - name: country_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_country')
+                field: country_code
+      - name: order_date
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: units_sold
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                inclusive: true

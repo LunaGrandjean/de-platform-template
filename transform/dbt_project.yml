@@ -1,0 +1,27 @@
+name: albert_marketplace
+version: "0.1.0"
+config-version: 2
+profile: albert_marketplace
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# Every BigQuery resource carries the group labels the course asks for.
+# The materialisation choice is recorded in docs/adr/0005-materialisations.md.
+models:
+  albert_marketplace:
+    +labels:
+      group: g07
+      step: l05
+    staging:
+      +materialized: view
+      +schema: silver
+    intermediate:
+      +materialized: view
+      +schema: silver
+    marts:
+      +materialized: table
+      +schema: gold

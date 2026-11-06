@@ -1,0 +1,26 @@
+version: 2
+
+# The intermediate models are where the two fan-outs and the duplicate orders
+# are resolved. Their grain tests are the ones that catch a regression there
+# before it reaches a fact.
+
+models:
+  - name: int_orders_deduplicated
+    description: "One row per real order after removing the legacy twin. GRAIN: (order_id)."
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+
+  - name: int_buyer_country
+    description: "One row per customer: the country of their default address. GRAIN: (customer_id). Resolves the buyer-to-address fan-out with the is_default rule."
+    columns:
+      - name: customer_id
+        data_tests: [unique, not_null]
+      - name: country_code
+        data_tests: [not_null]
+
+  - name: int_product_review_stats
+    description: "One row per reviewed product. GRAIN: (p_id). Resolves the product-to-review fan-out by aggregating."
+    columns:
+      - name: p_id
+        data_tests: [unique, not_null]

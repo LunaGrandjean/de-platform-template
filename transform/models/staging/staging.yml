@@ -1,0 +1,111 @@
+version: 2
+
+# One staging model per Bronze source. Each fixes the defects named in its
+# header comment and does nothing else. Tests here only guard those fixes
+# (a key stays unique, a flagged value stays flagged); grain and relationship
+# tests across the star belong with the gold models.
+
+models:
+  - name: stg_orders
+    description: "One row per snapshot order record, typed. Every order still appears twice under a different order_id; twins are resolved downstream."
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: buyer_id
+        data_tests: [not_null]
+      - name: discount_id
+        description: "Blank on every source row, so always NULL."
+        data_tests:
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 0
+                max_value: 0
+                inclusive: true
+              config:
+                where: "discount_id is not null"
+      - name: order_date
+        data_tests: [not_null]
+
+  - name: stg_order_items
+    description: "One row per order line, typed. unit_price_eur is the price at purchase. 30 lines priced 0.00 are flagged, not removed."
+    columns:
+      - name: order_id
+        data_tests: [not_null]
+      - name: p_id
+        data_tests: [not_null]
+      - name: quantity
+        data_tests: [not_null]
+      - name: unit_price_eur
+        data_tests: [not_null]
+      - name: is_zero_price
+        data_tests: [not_null]
+
+  - name: stg_product
+    description: "One row per catalogue product. Empty names are NULL. stock_qty is current stock, not units sold."
+    columns:
+      - name: p_id
+        data_tests: [unique, not_null]
+      - name: price_eur
+        data_tests: [not_null]
+
+  - name: stg_review
+    description: "One row per review. Blank review text is NULL; any other text is untouched."
+    columns:
+      - name: review_id
+        data_tests: [unique, not_null]
+      - name: rating
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments:
+                min_value: 1
+                max_value: 5
+                inclusive: true
+
+  - name: stg_product_reviews
+    description: "Bridge between products and reviews. Aggregate before joining to anything at a finer grain."
+    columns:
+      - name: p_id
+        data_tests: [not_null]
+      - name: review_id
+        data_tests: [not_null]
+
+  - name: stg_customer_shipping
+    description: "One row per customer-address link. is_default is a BOOLEAN; exactly one address per customer is the default."
+    columns:
+      - name: address_id
+        data_tests: [unique, not_null]
+      - name: customer_id
+        data_tests: [not_null]
+      - name: is_default
+        data_tests: [not_null]
+
+  - name: stg_shipping_details
+    description: "One row per address, without street and phone (personal data). country_code is ISO alpha-2 for the six markets."
+    columns:
+      - name: address_id
+        data_tests: [unique, not_null]
+      - name: country_code
+        description: "NULL means a country name outside the six known markets."
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["DE", "FR", "IT", "ES", "NL", "BE"]
+
+  - name: stg_python_orders
+    description: "Cursor extract of public.orders, already typed. Overlaps stg_orders; never sum both."
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+
+  - name: stg_kafka_clickstream
+    description: "One row per clickstream event, deduplicated on event_id (earliest Kafka position). Describes behaviour, not sales."
+    columns:
+      - name: event_id
+        data_tests: [unique, not_null]
+      - name: event_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["product_viewed", "added_to_cart", "order_placed"]

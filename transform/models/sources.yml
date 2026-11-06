@@ -1,0 +1,106 @@
+version: 2
+
+# Every Bronze table the transform project reads, all in g07_bronze (external
+# tables over Parquet in the Bronze bucket, created by scripts/warehouse.py).
+#
+# Never `SELECT COUNT(*)` or `SELECT *` on `orders`, `review`, `product_reviews`,
+# `product`, `customer_shipping` or `shipping_details`: their Parquet files still
+# carry the legacy unnamed index column, and BigQuery rejects it unless the query
+# names the declared columns (docs/data-dictionary.md). Staging models name them.
+#
+# Not declared on purpose: bronze/cdc/ (raw Debezium envelopes). It has no
+# BigQuery table yet, and a source with no table would make every freshness
+# check fail. Declare it when a staging model reads it.
+#
+# Freshness is measured with `dbt source freshness`. It never blocks
+# `dbt build`: it reports. Thresholds and the reason for each are below and in
+# docs/acceptance-criteria.md.
+
+sources:
+  - name: bronze_snapshot
+    description: >
+      Step 2 snapshot, load 20261026T105159Z-2efcb86a. Loaded once, by hand,
+      on 2026-10-26. Every value is a string, exactly as exported.
+    database: "{{ target.project }}"
+    schema: g07_bronze
+    config:
+      meta:
+        load_id: 20261026T105159Z-2efcb86a
+        loaded_on: "2026-10-26"
+    # No freshness block, deliberately. These tables are a frozen snapshot with
+    # no load-timestamp column (the load date lives only in the file path), so
+    # dbt has nothing to measure, and a threshold on a frozen load would be
+    # either always red or meaningless. The load_id above is the version pin;
+    # it only changes through a deliberate reload.
+    tables:
+      - name: orders
+        description: "222,644 orders. Every order appears twice under different order_id values (deliberate legacy defect)."
+      - name: order_items
+        description: "408,560 order lines, one per (order_id, p_id)."
+      - name: product
+        description: "42,858 catalogue products. Includes empty product names."
+      - name: review
+        description: "111,322 reviews. Free text, ratings as strings."
+      - name: product_reviews
+        description: "111,322 product-to-review links. A bridge: aggregate before joining."
+      - name: customer_shipping
+        description: "200,001 buyer-to-address links. A buyer has one to three addresses; is_default marks one."
+      - name: shipping_details
+        description: "200,001 addresses, with country. Restricted: personal data."
+
+  - name: bronze_ingestion
+    description: >
+      Step 3 ingestion outputs that grow with each run. Unlike the snapshot,
+      these read a whole prefix, so rows appear as new files land.
+    database: "{{ target.project }}"
+    schema: g07_bronze
+    tables:
+      - name: python_orders
+        description: >
+          Incremental extract of public.orders by order_id cursor
+          (ingestion/extract_orders.py). Overlaps the snapshot, so it is never
+          summed with it.
+        config:
+          # A DATE is not a timestamp, and BigQuery demands a partition filter,
+          # so the query converts the date and filters in one place.
+          loaded_at_query: >
+            select timestamp(max(ingestion_date))
+            from {{ source('bronze_ingestion', 'python_orders') }}
+            where ingestion_date >= date_sub(current_date(), interval 30 day)
+          freshness:
+            # The extract is a daily batch. ingestion_date is a DATE, so dbt sees
+            # it as midnight UTC: a run that lands any time on day D reads as D
+            # 00:00, and age is overstated by up to a day. At a daily cadence the
+            # age therefore sits between 0 and ~48h when nothing is wrong. 36h
+            # warns when a daily run was missed; 72h errors after three days
+            # without data, which is a long weekend or a broken job.
+            # What breaks: orders feed daily demand and revenue. One missed day
+            # leaves yesterday's sales out of the dashboards, which an analyst
+            # can still explain; three days makes the forecast inputs wrong.
+            warn_after: {count: 36, period: hour}
+            error_after: {count: 72, period: hour}
+      - name: kafka_clickstream
+        description: >
+          Validated clickstream events from topic clickstream
+          (ingestion/consume_clickstream.py), one row per accepted event.
+          Describes behaviour, not sales.
+        config:
+          # Load time, not event time. Events carry the generator's simulated
+          # clock: on 2026-11-05 the table held events dated 15-24 September,
+          # all ingested between 13:33 and 13:37 UTC that day. event_date would
+          # report 44 days of staleness for a table loaded an hour earlier.
+          # The date bound below only satisfies BigQuery's partition-filter rule.
+          loaded_at_query: >
+            select max(safe_cast(_ingested_at as timestamp))
+            from {{ source('bronze_ingestion', 'kafka_clickstream') }}
+            where event_date >= date '2000-01-01'
+          freshness:
+            # _ingested_at is a real timestamp, so the thresholds can be tight.
+            # The consumer is meant to run continuously: 6h without a new event
+            # means it (or the producer) is down during a working day, and that
+            # day's product-view and cart analysis is already incomplete.
+            # 24h is a whole day of behaviour lost. Clickstream is not money
+            # (orders are), so there is no tighter alert; the numbers differ
+            # from orders only because the cadence does.
+            warn_after: {count: 6, period: hour}
+            error_after: {count: 24, period: hour}

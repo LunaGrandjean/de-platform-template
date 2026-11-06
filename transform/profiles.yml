@@ -1,0 +1,17 @@
+# Read by dbt because the commands run from this directory (--profiles-dir .).
+# No secret lives here: authentication is Application Default Credentials
+# (`gcloud auth application-default login`).
+albert_marketplace:
+  target: dev
+  outputs:
+    dev:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID', 'data-engineering-i1') }}"
+      dataset: g07_dbt_dev          # default dataset; models set their own schema
+      location: europe-west1
+      threads: 4
+      job_execution_timeout_seconds: 300
+      job_retries: 1
+      # Same 1 GB cap as every Step 4 query: a runaway model fails instead of billing.
+      maximum_bytes_billed: 1073741824

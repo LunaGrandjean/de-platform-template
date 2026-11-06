@@ -83,7 +83,9 @@ so neither extraction date nor Kafka `emitted_at` is the sales date.
 quantity, not the number of lines, current `product.qty` stock, or the count of
 clickstream events. Returns are not subtracted in this initial gross-demand
 measure: the released returns table is empty and is outside the selected scope.
-Do not introduce revenue until its price/discount/return definition is agreed.
+`units_sold` stays a quantity. Lesson 5 adds a separate *gross* amount next to it
+(see Implementation notes): quantity times price at purchase, before discounts,
+without returns.
 
 ## Join path and country limitation
 
@@ -113,9 +115,9 @@ will use the unknown member.
 
 ## Reconciliation before aggregation
 
-1. Select the connector stream as the authoritative automated relational input.
-   Use an explicit handover from initial CSV snapshots; never add their full
-   totals together. Keep custom-extractor output out of this sales input.
+1. Choose one authoritative relational input and never add two copies of the
+   same orders together. (Lesson 5 uses the Step 2 snapshot; see Implementation
+   notes.)
 2. Reconcile repeated ingestion versions using source keys and provenance,
    then check order and order-line referential integrity.
 3. Investigate business duplicates separately. The dataset deliberately has
@@ -147,6 +149,26 @@ is a risk to the measure, to be resolved before Gold is treated as trusted.
   business rule. Record the unresolved cases and their effect on totals.
 - A changed default address exposes the documented country-restatement
   limitation rather than being presented as historical delivery evidence.
+
+## Implementation notes (Lesson 5)
+
+What was built in `transform/` and how it differs from the sketch above.
+
+- **Keys:** facts join on the natural keys `p_id`, `country_code` and `date_day`,
+  not on surrogate `product_key`, `country_key` and `date_key`. The grain is
+  unchanged.
+- **Country:** a buyer with no valid default address fails a test instead of
+  landing in an `UNKNOWN` member. None exists today (100,000 of 100,000 customers
+  have exactly one default address).
+- **Input:** the group took the Python ingestion route, not the connector. Gold
+  reads the Step 2 snapshot only. The cursor extract of `orders` has no order
+  lines, so it cannot feed the facts yet.
+- **Duplicate orders:** resolved once, in `int_orders_deduplicated`, with the
+  rule recorded in that model (222,644 orders become 111,322).
+- **Gross amount:** `fct_order_items` and `fct_daily_demand` also carry
+  `gross_amount_eur` and `gross_revenue_eur`, before discounts and without returns.
+- **Checks:** each acceptance check above maps to a test in
+  [acceptance-criteria.md](../acceptance-criteria.md).
 
 ## References
 
