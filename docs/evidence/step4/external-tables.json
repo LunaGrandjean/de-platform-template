@@ -1,0 +1,121 @@
+{
+  "load_id": "20261026T105159Z-2efcb86a",
+  "tables": [
+    {
+      "columns": [
+        "order_id",
+        "buyer_id",
+        "discount_id",
+        "payment_id",
+        "order_date"
+      ],
+      "rows": 222644,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/orders/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.orders",
+      "unread_columns": [
+        ""
+      ]
+    },
+    {
+      "columns": [
+        "order_id",
+        "p_id",
+        "qty",
+        "price_at_purchase"
+      ],
+      "rows": 408560,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/order_items/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.order_items",
+      "unread_columns": []
+    },
+    {
+      "columns": [
+        "review_id",
+        "buyer_id",
+        "r_desc",
+        "title",
+        "rating",
+        "seller_product_flag"
+      ],
+      "rows": 111322,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/review/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.review",
+      "unread_columns": [
+        ""
+      ]
+    },
+    {
+      "columns": [
+        "p_id",
+        "review_id"
+      ],
+      "rows": 111322,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/product_reviews/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.product_reviews",
+      "unread_columns": [
+        ""
+      ]
+    },
+    {
+      "columns": [
+        "p_id",
+        "p_name",
+        "p_desc",
+        "price",
+        "qty",
+        "category_id"
+      ],
+      "rows": 42858,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/product/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.product",
+      "unread_columns": [
+        ""
+      ]
+    },
+    {
+      "columns": [
+        "address_id",
+        "c_id",
+        "is_default"
+      ],
+      "rows": 200001,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/customer_shipping/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.customer_shipping",
+      "unread_columns": [
+        ""
+      ]
+    },
+    {
+      "columns": [
+        "address_id",
+        "street_address",
+        "city",
+        "state",
+        "zip",
+        "country",
+        "phone"
+      ],
+      "rows": 200001,
+      "source_uris": [
+        "gs://data-engineering-i1-marketplace-group/bronze/snapshot/shipping_details/ingestion_date=2026-10-26/load_id=20261026T105159Z-2efcb86a/*.parquet"
+      ],
+      "table": "data-engineering-i1.g07_bronze.shipping_details",
+      "unread_columns": [
+        ""
+      ]
+    }
+  ],
+  "verified_at_utc": "2026-11-05T13:23:19.566776+00:00"
+}

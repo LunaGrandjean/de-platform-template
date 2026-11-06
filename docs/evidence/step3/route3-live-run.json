@@ -1,0 +1,41 @@
+{
+  "route": 3,
+  "airbyte_used": false,
+  "recorded_date": "2026-11-05",
+  "psycopg_environment": {
+    "install_method": "uv sync --locked",
+    "version": "3.3.6",
+    "implementation": "binary",
+    "verified_in_project_environment": true
+  },
+  "orders_extractor": {
+    "command": "uv run --locked ingestion/extract_orders.py --once",
+    "sink": "GCS",
+    "prefix": "bronze/python/orders/",
+    "rows": 13,
+    "batches": 1,
+    "last_order_id": 225168,
+    "result": "completed_without_error"
+  },
+  "kafka_malformed_event_test": {
+    "topic": "clickstream-step3-check",
+    "group_id": "marketplace-step3-check",
+    "publisher_offsets": [
+      {"partition": 0, "offset": 0, "valid": true},
+      {"partition": 0, "offset": 1, "valid": false},
+      {"partition": 0, "offset": 2, "valid": true}
+    ],
+    "accepted": 2,
+    "rejected": 1,
+    "gcs_objects": [
+      "bronze/kafka/clickstream-step3-check/event_date=2026-11-05/2b92eb281a8249ed9e235ac0337f9035.parquet",
+      "bronze/_dlq/clickstream-step3-check/rejection_date=2026-11-05/b1e4dcdc55354d6f87bba33e14bcdcbe.json"
+    ],
+    "result": "completed_without_error"
+  },
+  "kafka_replay_check": {
+    "command": "uv run --locked ingestion/consume_clickstream.py --topic clickstream-step3-check --group-id marketplace-step3-check --idle-seconds 15",
+    "result": "No accepted or rejected records were emitted before the process returned to the prompt; a No partition metadata warning appeared during startup."
+  },
+  "evidence_source": "Operator-provided terminal output and local project-environment check; no secrets or raw event bodies recorded."
+}

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Student data platform tools for Albert's Marketplace"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "google-cloud-bigquery==3.47.0",
     "google-cloud-storage==3.16.0",
     "jsonschema[format]>=4.23,<5",
     "kafka-python>=3.0,<4",

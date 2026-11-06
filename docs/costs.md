@@ -79,6 +79,9 @@ before changing retention or replaying archived snapshots. See the published
 [storage-class conditions](https://cloud.google.com/storage/docs/storage-classes)
 and [lifecycle behaviour](https://cloud.google.com/storage/docs/lifecycle).
 
-Step 4 will add native BigQuery storage, three query-cost examples and query
-byte caps. Later FinOps work will compare this model with actual usage and
+Step 4 adds selected native BigQuery working tables; see [warehouse tuning](warehouse-tuning.md)
+for three processed-byte query costs and the per-query cap, and the
+[pricing ADR](adr/0004-warehouse-pricing.md) for capacity crossover.
+The initial approximately 33 MB of native logical storage is small; free-tier
+availability is shared and has not been audited for this billing account. Later FinOps work will compare this model with actual usage and
 revisit file sizes, refresh frequency and long-term retention.

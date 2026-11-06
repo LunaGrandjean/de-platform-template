@@ -1,0 +1,26 @@
+{
+  "controlled_tuning_measured": true,
+  "cost_cap_verified": true,
+  "daily_materialized_view_verified": true,
+  "evidence": [
+    "cost-cap.json",
+    "controlled-tuning.json",
+    "costed-queries.json",
+    "materialization.json"
+  ],
+  "location": "europe-west1",
+  "prechecks": {
+    "duplicate_order_ids": 0,
+    "orphan_lines": 0,
+    "unparsed_dates": 0,
+    "unparsed_order_ids": 0,
+    "unparsed_prices": 0,
+    "unparsed_qty": 0
+  },
+  "project": "data-engineering-i1",
+  "scope": "Existing snapshot warehouse only; no Docker rerun, Bronze write or source/IAM change",
+  "status": "live_step4_checks_passed",
+  "three_queries_remeasured": true,
+  "verified_at_utc": "2026-11-06T10:45:21.792376+00:00",
+  "warehouse_script_sha256": "e10627b9b2094eb1cdb1df95f021b1f55dd82ce4a7ae5e09d72344fc2df61b3b"
+}

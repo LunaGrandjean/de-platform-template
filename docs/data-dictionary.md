@@ -123,12 +123,13 @@ This keeps `customer.pwd`, `payment_details.card_no` and `payment_details.cvv`
 out of Bronze. `customer.fname`, `lname`, `email`, `phone` and
 `payment_details.billing_address` / `expiry_date` would also require personal-data
 classification if these tables were introduced. Exclude password and card-secret
-columns in future connector configuration before any Bronze write; do not rely
-on a later SQL model to remove them.
+columns from any future source selection before a Bronze write; do not rely on
+a later SQL model to remove them.
 
-The following Step 3 sections describe implemented/planned schemas, **not new
-observed GCS tables**. No live connector or Kafka deployment has been verified.
-These fields are not part of the Step 2 CSV snapshot.
+The following Step 3 sections describe implemented schemas. GCS Parquet object
+footers were checked during the read-only audit; no row values or DLQ body were
+read. The Step 2 CSV snapshot remains a separate load. See
+[`bronze-verification.json`](evidence/step3/bronze-verification.json).
 
 ## Step 3: custom SQL orders
 
@@ -194,24 +195,64 @@ Malformed source rows are not silently dropped. Their DLQ JSON fields are
 `rejected_at_utc`. The original payload/key may contain personal data and the
 DLQ uses the same restricted raw-data access expectations as Bronze.
 
-## Step 3: expected Airbyte metadata
+## Step 3: connector metadata
 
-The [GCS 1.0 migration reference](https://docs.airbyte.com/integrations/destinations/gcs-migrations)
-documents these field names. They belong to the connector, not the hand-written
-extractor. **The installed destination version and actual Parquet physical
-representation still need inspection**; do not label this as an observed schema.
+The selected route does not use Airbyte, so `_airbyte_*` fields are not part of
+the Route 3 schemas and must not be assumed to exist in Bronze. The orders
+extractor records `source_id`, `source_table`, and exclusive/inclusive ID
+watermarks in Parquet metadata. The Kafka consumer records topic, partition,
+offset, key, broker timestamp and ingestion time as Parquet columns. These are
+the observed-by-design provenance fields for the selected Python jobs; verify
+their physical representation against the actual GCS objects before claiming
+live schema validation.
 
-| Field | Expected meaning / representation | Personal data? |
-|---|---|---|
-| `_airbyte_raw_id` | String row identifier assigned during extraction/loading; not a source primary key and not a business-deduplication key | Indirect: linkable ingestion record |
-| `_airbyte_extracted_at` | Extraction timestamp; representation depends on destination/output (epoch-ms or logical timestamp must be checked) | No direct identifier |
-| `_airbyte_meta` | Structured metadata, including sync/change information; inspect actual nested fields and types | Possible if diagnostic change details include source values |
-| `_airbyte_generation_id` | Integer generation identifier; distinguishes refresh generations | No |
+## Step 4: BigQuery tables
 
-Inspect and document any emitted CDC fields such as deletion markers and LSNs
-before declaring the connector dictionary complete. The configured catalog
-checker validates source fields/modes; it does not manufacture Airbyte metadata
-or certify that a destination has produced those fields.
+External tables in `g07_bronze` expose the seven Bronze tables above with the
+same column names, all `STRING`, for load `20261026T105159Z-2efcb86a` only. The
+empty-named CSV index column is not declared, because BigQuery rejects it; it
+stays in the Parquet files. Native tables in `g07_warehouse` are typed copies
+of the two sales tables; no row is removed or deduplicated
+([ADR 0004](adr/0004-warehouse-tables.md)).
+
+`g07_warehouse.orders`: 222,644 rows, partitioned by month of `order_date`.
+
+| Column | BigQuery type | From Bronze | Personal data? |
+|---|---|---|---|
+| `order_id` | INT64 | `SAFE_CAST(order_id AS INT64)` | Yes: linkable transaction ID |
+| `buyer_id` | STRING | `buyer_id`, empty string as NULL | Yes: pseudonymous buyer ID |
+| `discount_id` | INT64 | `SAFE_CAST(discount_id AS INT64)` | No |
+| `payment_id` | INT64 | `SAFE_CAST(payment_id AS INT64)` | Yes: linkable payment ID |
+| `order_date` | DATE | `SAFE_CAST(order_date AS DATE)`; partition column | No direct identifier; purchase attribute |
+
+`g07_warehouse.order_lines`: 408,560 rows, partitioned by month of
+`order_date`, clustered by `p_id`.
+
+| Column | BigQuery type | From Bronze | Personal data? |
+|---|---|---|---|
+| `order_id` | INT64 | `order_items.order_id` | Yes: linkable transaction ID |
+| `p_id` | STRING | `order_items.p_id`; clustering column | No |
+| `qty` | INT64 | `order_items.qty` | No direct identifier; purchase attribute |
+| `price_at_purchase` | NUMERIC | `order_items.price_at_purchase` | No direct identifier; purchase attribute |
+| `order_date` | DATE | Parent `orders.order_date`, joined on `order_id`; partition column | No direct identifier; purchase attribute |
+
+Before the build, 0 values failed these casts and 0 order lines lacked a parent
+order; the checks are in `docs/evidence/step4/native-tables.json`.
+
+## Step 4: provisional daily-demand materialised view
+
+`g07_warehouse.daily_demand` is deployed and verified on 2026-11-06. It has
+one row per product/day in the pinned snapshot (356,981 rows before any date
+filter), monthly partitions and product clustering. It is a performance
+aggregate; country mapping and business-duplicate reconciliation remain Lesson 5.
+
+| Column | BigQuery type | Meaning | Personal data? |
+|---|---|---|---|
+| `order_date` | DATE | Parent order day; aggregate grain and monthly partition source | No direct identifier; aggregate purchase attribute |
+| `p_id` | STRING | Product ID; aggregate grain and clustering column | No |
+| `units` | INT64 | `SUM(qty)` for that product/day; business duplicates retained | No direct identifier; aggregate purchase attribute |
+
+See [DDL](../warehouse/daily-demand.sql) and [live MV/correctness evidence](evidence/step4/materialization.json).
 
 ## References
 

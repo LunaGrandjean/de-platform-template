@@ -1,0 +1,14 @@
+{
+  "verified_at_utc": "2026-11-06T10:48:06.586762+00:00",
+  "command": "uv run --locked python -m unittest discover -s tests -p 'test_*.py'",
+  "tests_run": 45,
+  "failures": 0,
+  "errors": 0,
+  "scope": "Offline regression and fault injection; live evidence is in separate job records",
+  "test_files_sha256": {
+    "test_bronze_snapshot.py": "1bb52e352362bc11e48d10e9024dd0ffa4654864e0f477e300d53968c524d3e4",
+    "test_cdc.py": "b8ccffe4e4dfed90550169f0e64d0849ff565df908f0b778b5ecbbda726da42f",
+    "test_ingestion.py": "d29e181399c596b44be6c56423abf9a6c2eebef12c7f0e5a325959f6d8cf1350",
+    "test_warehouse.py": "056b76dd5748e113adee18df160ae1b4f7fc72839480bdff0e428a6bfdefa475"
+  }
+}

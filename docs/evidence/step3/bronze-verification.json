@@ -1,0 +1,122 @@
+{
+  "recorded_at_utc": "2026-11-05T15:20:51Z",
+  "status": "gcs_inventory_and_parquet_footers_verified; one_orders_catch_up_completed",
+  "method": "GCS object listings and HTTP-range Parquet footer reads; no Parquet row values or DLQ body read",
+  "bucket": {
+    "name": "data-engineering-i1-marketplace-group",
+    "location": "EUROPE-WEST1",
+    "storage_class": "STANDARD"
+  },
+  "bronze_inventory": {
+    "objects": 201,
+    "bytes": 76842129,
+    "by_prefix": {
+      "bronze/_dlq/": 1,
+      "bronze/_manifests/": 1,
+      "bronze/kafka/": 130,
+      "bronze/python/": 50,
+      "bronze/snapshot/": 19,
+      "bronze/postgres/": 0
+    }
+  },
+  "step2_snapshot": {
+    "objects": 19,
+    "manifest_objects": 1,
+    "parquet_footer_errors": 0,
+    "compression": "SNAPPY",
+    "schema_variants_per_table": 1,
+    "remote_footer_rows_match_local_manifest": true,
+    "rows_by_table": {
+      "customer_shipping": 200001,
+      "order_items": 408560,
+      "orders": 222644,
+      "product": 42858,
+      "product_reviews": 111322,
+      "review": 111322,
+      "shipping_details": 200001
+    },
+    "total_rows": 1296708,
+    "physical_values_remain_strings": true
+  },
+  "step3_python_orders": {
+    "objects": 50,
+    "footer_errors": 0,
+    "rows": 225381,
+    "columns": ["order_id", "buyer_id", "discount_id", "payment_id", "order_date"],
+    "arrow_types": ["int64", "string", "int64", "int64", "date32[day]"],
+    "compression": "SNAPPY",
+    "schema_variants": 1,
+    "row_count_distribution": {
+      "5000": 45,
+      "96": 1,
+      "20": 1,
+      "15": 1,
+      "13": 1,
+      "237": 1
+    },
+    "order_id_min": 1,
+    "order_id_max": 225405,
+    "per_file_order_id_min_max_ranges_overlap": false,
+    "reported_latest_object_rows_verified": 13,
+    "catch_up_run": {
+      "command": "uv run --locked ingestion/extract_orders.py --once",
+      "rows": 237,
+      "batches": 1,
+      "cursor_lower_exclusive": 225168,
+      "cursor_upper_inclusive": 225405,
+      "object": "bronze/python/orders/ingestion_date=2026-11-05/7a3f7767b9704262a19a10b8bc317397.parquet",
+      "size_bytes": 11491,
+      "parquet_footer_verified": true,
+      "checkpoint_updated": true
+    },
+    "snapshot_overlap": "Expected: the cursor output starts at order_id 1 and therefore overlaps the Step 2 orders snapshot. Exact cross-prefix key comparison was not performed; do not sum both paths."
+  },
+  "step3_kafka": {
+    "main_topic": {
+      "objects": 129,
+      "rows": 29144,
+      "event_date_partitions": 10,
+      "first_event_date": "2026-09-15",
+      "last_event_date": "2026-09-24",
+      "footer_errors": 0,
+      "schema_variants": 1,
+      "arrow_types": ["int32", "string", "string", "string", "string", "string", "string", "binary", "string", "int32", "int64", "binary", "int64", "string"],
+      "compression": "SNAPPY"
+    },
+    "isolated_test_topic": {
+      "objects": 1,
+      "rows": 2,
+      "footer_errors": 0,
+      "schema_variants": 1,
+      "arrow_types": ["int32", "string", "string", "string", "string", "string", "string", "binary", "string", "int32", "int64", "binary", "int64", "string"],
+      "compression": "SNAPPY",
+      "kafka_offset_min": 0,
+      "kafka_offset_max": 2
+    },
+    "dlq": {
+      "objects": 1,
+      "size_bytes": 323,
+      "body_read": false
+    }
+  },
+  "source_freshness_checks": {
+    "before_catch_up": {
+      "checked_at_utc": "2026-11-05T15:04Z",
+      "orders_bronze_watermark": 225168,
+      "source_max_order_id": 225367,
+      "source_rows_above_bronze_watermark": 199
+    },
+    "after_catch_up": {
+      "checked_at_utc": "2026-11-05T15:20Z",
+      "orders_bronze_watermark": 225405,
+      "source_max_order_id": 225407,
+      "source_rows_above_bronze_watermark": 2
+    }
+  },
+  "limitations": [
+    "The object bodies were not read. DLQ body fields were not inspected.",
+    "No row-level cross-path deduplication was run; orders snapshot and Python extract remain separate inputs.",
+    "Footer metadata verifies row counts/schema and offset ranges, not event semantic validity or absence of replay duplicates.",
+    "Two source orders were already above the new watermark at the post-run check; ongoing source traffic can add further rows."
+  ]
+}

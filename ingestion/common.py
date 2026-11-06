@@ -92,7 +92,7 @@ def kafka_options() -> dict:
     """Never log this dictionary: SASL values can be credentials."""
     options = {"bootstrap_servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(","),
                "security_protocol": os.environ.get("KAFKA_SECURITY_PROTOCOL", "PLAINTEXT"),
-               "api_version_auto_timeout_ms": 10_000}
+               "bootstrap_timeout_ms": 10_000}
     for variable, option in (("KAFKA_SASL_MECHANISM", "sasl_mechanism"),
                              ("KAFKA_SASL_USERNAME", "sasl_plain_username"),
                              ("KAFKA_SASL_PASSWORD", "sasl_plain_password"),

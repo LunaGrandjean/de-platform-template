@@ -1,0 +1,43 @@
+{
+  "prechecks": {
+    "duplicate_order_ids": 0,
+    "orphan_lines": 0,
+    "unparsed_dates": 0,
+    "unparsed_order_ids": 0,
+    "unparsed_prices": 0,
+    "unparsed_qty": 0
+  },
+  "tables": [
+    {
+      "build_bytes_processed": 13000909,
+      "build_job_id": "afe7ab88-5416-4396-80a0-c05939b34eb9",
+      "clustering": null,
+      "logical_bytes": 12023504,
+      "partitioning": {
+        "field": "order_date",
+        "requirePartitionFilter": true,
+        "type": "MONTH"
+      },
+      "require_partition_filter": true,
+      "rows": 222644,
+      "table": "data-engineering-i1.g07_warehouse.orders"
+    },
+    {
+      "build_bytes_processed": 16349904,
+      "build_job_id": "39a00f88-5a7d-4027-9636-62891b81e5fb",
+      "clustering": [
+        "p_id"
+      ],
+      "logical_bytes": 21245120,
+      "partitioning": {
+        "field": "order_date",
+        "requirePartitionFilter": true,
+        "type": "MONTH"
+      },
+      "require_partition_filter": true,
+      "rows": 408560,
+      "table": "data-engineering-i1.g07_warehouse.order_lines"
+    }
+  ],
+  "verified_at_utc": "2026-11-05T13:25:10.323342+00:00"
+}

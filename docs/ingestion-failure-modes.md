@@ -1,55 +1,54 @@
 # Step 3 ingestion failure modes and credentials
 
-Status: Python jobs implemented and locally tested; PostgreSQL/Kafka/Airbyte
-deployment and failure experiments are pending on the Docker operator's machine.
-Local tests use fake fetch/commit callbacks and local object storage. They do
-not establish live delivery guarantees. See [local evidence](evidence/step3/local-checks.json).
+Status: Route 3 (Python, no Airbyte) is selected. The orders extractor and
+clickstream consumer have local fault-injection checks. Debezium snapshot,
+CDC GCS writes, restart/resume and one synthetic CRUD sequence were verified
+live on 2026-11-05; this does not establish exact-once delivery. See [local evidence](evidence/step3/local-checks.json),
+[run evidence](evidence/step3/route3-live-run.json) and
+[Bronze verification](evidence/step3/bronze-verification.json).
 
 ## Failure coverage
 
-| Failure | Handled? | By what | What happens |
-|---|---|---|---|
-| New PostgreSQL rows | Code: yes for visible higher IDs; live pending | Custom `order_id` cursor; proposed connector CDC | Extractor writes a bounded ID window then checkpoints each durable batch. A lower ID committing late can still be missed. |
-| Updates | Custom extractor: **no**; connector: planned | ID cursor does not revisit old rows; proposed CDC WAL stream | Old extractor values remain. Connector behaviour must be verified with a real update. |
-| Deletes | Custom extractor: **no**; connector: planned | No deletion query; CDC is the proposed alternative | Bronze retains original records. A connector tombstone/change record is needed for later reconciliation. |
-| Source outage | Initial connection: yes, bounded; mid-query: stops | Five psycopg attempts with 1/2/4/8-second backoff; read timeout | After exhaustion or a query failure, job exits with its last completed checkpoint. Restart after recovery. No infinite retry promise. |
-| Malformed Kafka row | Code: yes; broker test pending | UTF-8/JSON parsing, JSON Schema and DLQ | Invalid original bytes, source offset, reason and rejection time are durably written before committing. Valid events continue. |
-| SQL malformed row / schema drift | Fail closed | Explicit expected columns, Arrow schema and key checks | Stops instead of silently dropping/casting away fields; no checkpoint for the failed batch. |
-| Event schema change | Code: yes by rejection | `schema_version=1`, typed schema, forbidden extra fields | Unknown versions/fields go to DLQ. Update schema and tests deliberately before accepting a new version. |
-| Duplicate after restart | Expected, retained | Upload precedes cursor/offset commit | A failed checkpoint/commit can replay already landed data. Local simulations measured two replayed rows in each tested path. Reconcile later using source keys/offset provenance. |
-| Expired credential | Stops safely; renewal not automated | ADC refresh where supported, driver/client errors | Storage errors prevent cursor/offset advancement. An operator must restore authorised access. No secrets are logged or copied into Git. |
-| DLQ/storage write failure | Code: yes | Commit occurs only after every output write succeeds | The whole Kafka poll remains uncommitted, even if some valid files were already written; replay may duplicate them. |
-| Kafka rebalance / failed offset commit | At-least-once replay within retention | Synchronous explicit next-offset commits | Objects may already exist when commit fails. Restart/reassignment can produce duplicates; no exactly-once claim. |
-| Kafka retention expires before processing | **No recovery of removed events** | Consumer starts/resets at earliest available offset | Events no longer retained by Kafka cannot be recovered from that broker. Monitor lag; increase retention or restore from another source. |
-| PostgreSQL out-of-order transaction commits | Custom extractor: **not handled** | `order_id` is not a commit timestamp | A low ID becoming visible after the saved cursor can be missed. The local simulation demonstrates one missed lower-ID row. |
-| WAL limit invalidates CDC slot | Pending live validation; not automatically repaired | Source compose requests `max_slot_wal_keep_size=512MB` | A lost slot requires operator intervention and resnapshotting. Verify live values and retained bytes; do not promise that PostgreSQL will automatically delete the slot. |
-| Source rebuild / reset | Partial detection | `SOURCE_ID` binding and backwards maximum check | A detectable backwards watermark fails. Other resets can be missed; deliberately choose a new source identity/state and define handover. |
-| Concurrent custom extractors | Same state file: rejected | OS file lock | A second writer cannot acquire that local checkpoint. Separate machines/state files are not coordinated; use one operator. |
-| Source `TRUNCATE` | **Not handled by the proposed publication** | Publication includes INSERT/UPDATE/DELETE only | Coordinate source resets explicitly; do not treat a truncate as ordinary row deletes. |
+| Failure | Handling and observed limit |
+|---|---|
+| New PostgreSQL orders | The custom `order_id` cursor extracts higher visible IDs and checkpoints after each durable batch. It can miss lower IDs that commit late. GCS has 225,381 rows through watermark 225405; the post-run source check found 2 further rows. |
+| PostgreSQL updates/deletes | The orders cursor does not revisit old rows or read WAL. Debezium CDC captures row-level changes for the seven publication tables; publication excludes TRUNCATE. |
+| Source outage | Initial connection retries are bounded to five attempts with 1/2/4/8-second backoff. Unrecovered connection/query/storage errors stop the job and retain the last completed checkpoint. |
+| SQL schema drift | The extractor checks expected columns and Arrow schema and fails closed instead of silently dropping fields. A failed batch does not advance the cursor. |
+| Cursor replay | Upload-before-checkpoint can duplicate rows after a crash. Local fault injection observed two replayed rows in its scenario. Downstream jobs must reconcile with source keys and batch watermarks. |
+| Concurrent extraction | An OS lock prevents two writers to the same local state file. Separate machines are not coordinated; use one checkpoint owner. |
+| Malformed Kafka message | Invalid UTF-8/JSON, tombstones, duplicate keys and schema violations are written to the DLQ with original bytes/key, source offset, reason and rejection time. The recorded live test used an isolated topic; verify GCS objects independently. |
+| DLQ/storage write failure | The consumer commits only after all valid and rejected outputs for a poll are stored. A failed write prevents that poll from committing. |
+| Kafka commit failure or crash after write | At-least-once replay can create duplicate Parquet/DLQ objects because writes and offset commits are not transactional. Local fault injection demonstrated replay. |
+| Kafka retention expires | Events already removed from Kafka cannot be recovered by this consumer. Monitor lag and retention. |
+| Event schema change | The consumer enforces `schema_version=1` and rejects unknown fields/versions. Update the schema deliberately before accepting a new version. |
+| PostgreSQL source reset or `TRUNCATE` | The cursor only detects some backwards-watermark resets. `TRUNCATE` and other rebuilds require an explicit source identity/checkpoint handover. |
+| Logical slot lag | Debezium uses `marketplace_bronze_slot`; after provisioning the heartbeat topic, `confirmed_flush_lsn` advanced. Retained WAL was 144,920 bytes at 16:18 UTC. The configured 512 MB limit can invalidate a lagging slot; keep monitoring connector state and WAL. See [CDC status evidence](evidence/step3/cdc-status.json). |
 
-## Credential locations, access and revocation
+## Credentials and access
 
-| Credential | Location / who may access it | Revocation / current evidence |
+| Credential/access | Location and status | Handling |
 |---|---|---|
-| PostgreSQL ingestion password | Operator's ignored `.env` / environment; approved operators only. Source role has SELECT on the seven tables and CDC replication privilege. | Source owner changes the password or disables LOGIN. SQL is provided, but this role/password has not been deployed here. Never commit a connection URL containing a password. |
-| Python GCS identity | Existing local ADC profile of the person running the jobs; not copied into the repository or shared between members | Revoke the relevant user grant/session through the course account process. No Step 3 service-account/HMAC key is created by these Python jobs. |
-| Airbyte GCS HMAC key | Proposed dedicated service-account HMAC credential in Airbyte's secret configuration; project administrator / designated connector operator | Administrator can mark the key inactive and delete it. Creation, actual owner/access and any cleanup are pending; do not invent a key ID or claim revocation. |
-| Kafka TLS/SASL credentials, if configured | Operator's ignored environment and authorised certificate paths | Broker administrator rotates/revokes them. Provided source compose is local plaintext, so no SASL secret is claimed as configured. Use approved local/tunnel access. |
+| PostgreSQL ingestion login | Ignored local `.env`; Debezium uses `marketplace_ingest` with `REPLICATION`, and the Python extractor uses the same login for SQL. | Keep credentials local. Connector config is registered over local Connect REST. Rotate/disable through the source owner. Never put a connection URL or password in Git/logs. |
+| Python GCS identity | The current ADC successfully listed Bronze objects and read Parquet footers; write permission was not tested in this audit. | Each operator authenticates as themselves. Do not copy ADC files or share key material. Storage errors must not advance cursor/offset state. |
+| Kafka access | Current source compose uses local plaintext listeners. | Use only on the operator's host or approved tunnel. If TLS/SASL is introduced, keep credentials/certificates in ignored local configuration and rotate through the broker owner. |
+| Airbyte GCS HMAC key | Not applicable to the selected route; no Airbyte destination or key is claimed. | Do not create one for Route 3. |
 
-Repository `.gitignore` excludes `.env`, key/credential JSON patterns, generated
-data and cursor files under `data/`. This is an aid, not a substitute for reviewing
-exports/screenshots before commit. Never put passwords in shell arguments or
-paste complete Airbyte exports into a PR. The catalog checker emits only a
-safe schema/selection summary.
+The repository `.gitignore` excludes `.env`, credential JSON patterns, generated
+data and cursor files under `data/`. Review any evidence before commit; do not
+include raw source rows, raw event bodies, ADC files, passwords or keys.
 
-Step 2's [actual bucket IAM](../infra/iam.md) remains the verified cloud-access
-baseline. No additional Step 3 IAM changes, keys, connector jobs or replication
-slots are claimed as deployed. The operator must inventory and remove only
-confirmed unused group slots/keys; never drop another group's resources.
+Step 2's [bucket IAM record](../infra/iam.md) is the verified cloud-access
+baseline. No Step 3 IAM change is claimed. The observed inactive replication
+slot should be inventoried with its owner before any cleanup; never drop a
+slot solely because it is inactive.
 
-## Operational actions
+## Operational references
 
-Use [the Docker handoff](runbooks/step3-docker-handoff.md) for live setup,
-malformed-event verification, source-failure measurements and slot/key cleanup.
-Keep connector, custom and snapshot paths separate. Choose an explicit
-snapshot-to-connector handover before using them together in a warehouse.
+- [Route 3 ingestion guide](../ingestion/README.md)
+- [Route 3 runbook](runbooks/step3-docker-handoff.md)
+- [Ingestion ADR](adr/0003-ingestion-modes.md)
+
+Keep the snapshot, orders cursor output and Kafka output in separate paths.
+Before warehouse use, define which relational path is authoritative and how
+snapshot overlap and replay duplicates will be reconciled.
