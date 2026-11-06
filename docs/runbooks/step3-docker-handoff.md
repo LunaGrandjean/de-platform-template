@@ -1,17 +1,27 @@
-# Step 3: Docker operator handoff
+# Step 3: Route 3 operator runbook (no Airbyte)
 
-## Scope and current status
+## Scope and status
 
-Luna's laptop cannot enable Docker's Windows virtualisation prerequisite without
-an administrator. A group member with working Docker takes this procedure.
-The source stack and live tests below have **not** been run as part of this
-Step 3 preparation. Do not mark the step complete until the evidence checklist
-at the end is filled with actual results.
+**Step 3 is complete** for the selected Python/no-Airbyte route. Orders and
+clickstream ingestion are implemented; Debezium CDC reads the existing slot,
+and the Python sink writes the seven published tables to GCS. Snapshot, CRUD,
+restart/resume, slot/WAL and lag evidence is in
+[`cdc-status.json`](../evidence/step3/cdc-status.json). For a team member who
+has cloned the repository, follow the [reproduction guide](step3-reproduction.md).
 
-## 1. Get the group branch and start the source
+The orders one-shot catch-up wrote 237 rows through watermark 225405; two rows
+were already above that watermark at its post-run check. The orders path
+overlaps the initial snapshots, and its cursor does not capture updates,
+deletes or late lower IDs. See
+[`bronze-verification.json`](../evidence/step3/bronze-verification.json).
 
-Obtain the latest `Luna` work from the group's repository after it is committed
-and pushed. From the repository root on the Docker operator's machine:
+Use one source stack and one production checkpoint/group identity. A separately
+seeded database is a different source even when its IDs overlap. Never run
+`docker compose down -v` for a normal restart; it deletes the source volumes.
+
+## 1. Check the source services
+
+On the operator's machine, start or inspect the supplied source stack:
 
 ```powershell
 docker info
@@ -20,109 +30,89 @@ docker compose ps
 docker compose logs --tail 30 seed migrate kafka-init
 ```
 
-The existing compose file already provides PostgreSQL, Kafka, the storefront
-and the traffic generator. Airbyte is a separate installation: use the
-course-approved Airbyte setup and record its platform/connector versions.
-Do not invent an Airbyte compose file or assume its container names/network.
-Verify that the database contains the seeded seven tables and that `clickstream`
-receives events before configuring ingestion.
+Confirm PostgreSQL, Kafka, the seeded source tables and the `clickstream` topic
+are healthy. For host-run jobs, the defaults are PostgreSQL `127.0.0.1:5432`
+and Kafka `localhost:9092`. Use only the operator's local machine or an
+approved encrypted tunnel; do not expose the unauthenticated ports publicly.
 
-Never use `docker compose down -v` for a normal restart: it deletes the source
-volumes and invalidates saved extraction state. The group uses one source copy;
-independent reseeded laptops are different sources even if their IDs overlap.
+The project `.env` is ignored by Git. Configure `PGHOST`, `PGPORT`,
+`PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE`, `SOURCE_ID`,
+`KAFKA_BOOTSTRAP_SERVERS`, `KAFKA_TOPIC`, `KAFKA_GROUP_ID`,
+`GCP_PROJECT_ID` and `BRONZE_BUCKET` there. Use the operator's own ADC for
+GCS. Never share credentials through Git or copy another member's ADC file.
 
-## 2. Prepare the ingestion identity and CDC
+## 2. Start the no-Airbyte CDC path
 
-Run the committed SQL against this source database:
+Read-only checks against the current source should confirm:
+
+- `wal_level=logical` and the configured `max_slot_wal_keep_size`;
+- the seven source tables exist;
+- `marketplace_bronze_publication` contains exactly the seven intended tables;
+- the `marketplace_bronze_slot` owner, plugin, activity and retained WAL.
+
+The group confirmed the existing `marketplace_bronze_slot` belongs to this
+pipeline. Start Debezium Connect (Compose creates Connect's internal topics,
+the seven publication topics and heartbeat topic), register the connector from
+local `.env`, then run the Bronze sink:
 
 ```powershell
-Get-Content ingestion/airbyte/setup_postgres.sql -Raw | docker compose exec -T db psql -U postgres -d marketplace
-docker compose exec db psql -U postgres -d marketplace
+$env:UV_CACHE_DIR = Join-Path (Get-Location) 'data/uv-cache'
+docker compose up -d debezium-connect
+uv run --locked ingestion/configure_cdc.py
+uv run --locked ingestion/consume_cdc.py --batch-size 5000
 ```
 
-At the interactive psql prompt, set the role password with
-`\password marketplace_ingest`; do not paste a real password into a committed
-SQL file or shell command. Verify its role attributes and grants. If reusing an
-existing role, inspect inherited grants; the script does not revoke unknown
-existing privileges. CDC requires its dedicated role to have `REPLICATION`.
-Do not grant SELECT on `customer` or `payment_details`.
+Check `http://127.0.0.1:18083/connectors/marketplace-bronze/status` for
+`RUNNING`, then check the slot's `active`, `wal_status`, and retained bytes in
+`pg_replication_slots`. Do not create, drop, or rename the slot. The sink
+commits each Kafka poll only after all matching GCS objects are durable. If it
+stops, restart the same command with the same consumer group to resume; duplicate
+objects can result from a crash after GCS upload and before Kafka commit. The
+initial CDC snapshot overlaps the Step 2 snapshot and orders backfill. The
+publication does not capture `TRUNCATE`; treat one as a source reset and
+coordinate a full snapshot plus downstream reconciliation before resuming CDC.
+Runtime evidence is in
+[`cdc-status.json`](../evidence/step3/cdc-status.json).
 
-Check `SHOW wal_level;` and `SHOW max_slot_wal_keep_size;`. The provided compose
-requests `logical` and `512MB`; those values are source-code settings, not a
-substitute for recording live results. Inspect the publication and confirm it
-contains exactly the seven required public tables.
+## 3. Run the orders extractor
 
-Only when ready to start Airbyte, create its dedicated slot using pgoutput:
-
-```sql
-SELECT * FROM pg_create_logical_replication_slot('marketplace_bronze_slot', 'pgoutput');
-```
-
-Do not recreate an existing slot blindly. Inspect
-`ingestion/airbyte/inspect_slots.sql` first and verify ownership. A slot holding
-WAL while its reader is stopped can consume disk; the 512 MB limit can invalidate
-the slot and require resnapshotting. It does not guarantee indefinite retention.
-
-## 3. Configure and test Airbyte
-
-Use [the setup contract](../../ingestion/airbyte/connection-plan.json) as a
-checklist. It is **not** an importable/exported runtime configuration.
-
-1. Create a PostgreSQL source with the dedicated role. Select CDC and enter the
-   actual publication/slot names. Use a host reachable from the Airbyte worker:
-   `localhost` inside a container is that container, not the PostgreSQL service.
-2. Discover streams. Select exactly `orders`, `order_items`, `review`,
-   `product_reviews`, `product`, `customer_shipping`, `shipping_details` in `public`.
-   Keep all their source fields selected. Leave every other table unselected,
-   particularly `customer` and `payment_details`. This excludes `pwd`, `card_no`
-   and `cvv` before any Bronze write. Disable automatic selection of new tables.
-3. Set the GCS destination to the existing group bucket, region `europe-west1`,
-   path `bronze/postgres`, Parquet and Snappy. The documented GCS destination
-   v1.0.0 uses HMAC credentials from a service account, not the Python jobs' ADC.
-   Obtain approved credentials from the project administrator; record the owner
-   and revocation procedure. Do not create keys merely to bypass denied IAM.
-4. Configure the path format shown in the plan. Use Incremental / Append and
-   an hourly schedule. Do not use Full Refresh / Overwrite: it can delete prior
-   Bronze objects. The connection test needs to create/list/delete a probe
-   object; have the administrator grant the required bucket permissions.
-5. Run the initial sync and a second incremental sync. Record actual job IDs,
-   stream counts, GCS paths and the metadata fields in a landed Parquet file.
-
-Current official references, checked 2026-10-26:
-[PostgreSQL source](https://docs.airbyte.com/integrations/sources/postgres) and
-[GCS destination](https://docs.airbyte.com/integrations/destinations/gcs).
-Version-specific UI field names can differ; export the actual installed
-configuration rather than treating the plan as deployed proof.
-
-Keep raw exports under ignored `data/`; they can contain credentials. Run:
+First review the existing local checkpoint at `data/state/orders.json`; keep it
+stable across restarts. Run one bounded window:
 
 ```powershell
 $env:UV_CACHE_DIR = Join-Path (Get-Location) 'data/uv-cache'
 uv sync --locked
-uv run --locked ingestion/validate_connector_export.py data/airbyte-configured-catalog.json
+uv run --locked ingestion/extract_orders.py --once
 ```
 
-Commit only the generated field-selection summary and manually reviewed,
-redacted screenshots/settings. The checker does not certify CDC or a live sync.
+The command writes append-only Parquet to
+`bronze/python/orders/ingestion_date=.../` before it saves the next cursor. A
+crash after upload can cause replay, so downstream readers must preserve and
+reconcile duplicates. Do not use a local sink with the production checkpoint.
 
-## 4. Start the Python jobs
+For a local-sink check against the database, use both a separate state file and
+output directory:
 
-Use the [ingestion instructions](../../ingestion/README.md), fill an ignored
-local `.env`, and authenticate to GCP as your own authorised course identity.
-Do not copy Luna's ADC file. Run the SQL extractor and Kafka consumer in separate
-terminals; keep their state/group identities stable across restarts.
+```powershell
+uv run --locked ingestion/extract_orders.py --once --local-output data/step3-local --state-file data/state/orders-local-test.json
+```
 
-The simplest arrangement runs both jobs on the Docker operator's machine.
-If Luna runs them remotely, arrange approved connectivity first. The existing
-Kafka HOST listener advertises `localhost:9092`; changing only the bootstrap
-hostname will not make this broker remotely reachable. Configure a suitable
-tunnel/listener with the operator. Never solve this by exposing the source's
-unauthenticated default ports to the public internet.
+The `order_id` cursor captures higher visible IDs only. It misses updates,
+deletes and lower IDs that commit after the saved watermark; do not describe it
+as CDC. To check restart behaviour, record the cursor/object before and after a
+second run and measure any duplicate rows from actual output. Do not reset or
+delete the production checkpoint to manufacture a restart test.
 
-## 5. Prove malformed-event handling on a real broker
+## 4. Run the Kafka consumer and isolated DLQ scenario
 
-Use an isolated topic, group ID and the resulting separate Bronze topic prefix.
-Create the topic explicitly, particularly if auto topic creation is disabled:
+The production consumer reads `clickstream` using the configured group ID:
+
+```powershell
+uv run --locked ingestion/consume_clickstream.py
+```
+
+For a repeatable malformed-event scenario, use only a dedicated test topic and
+group so test offsets cannot advance the production group:
 
 ```powershell
 docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic clickstream-step3-check --partitions 1 --replication-factor 1
@@ -130,46 +120,36 @@ uv run --locked ingestion/publish_test_events.py
 uv run --locked ingestion/consume_clickstream.py --topic clickstream-step3-check --group-id marketplace-step3-check --idle-seconds 15
 ```
 
-The publisher sends valid, malformed and valid events with one key and prints
-their actual offsets. Expect two accepted records and one rejection across the
-consumer's poll summaries. Verify the matching topic/partition/offset in:
+The publisher emits valid, malformed and valid events. Confirm the actual
+offsets in the output, two accepted records, one rejection, the second valid
+event after the rejection, and the committed next offset. In GCS, verify the
+matching object under `bronze/kafka/clickstream-step3-check/` and the rejection
+under `bronze/_dlq/clickstream-step3-check/`. Restart the same test group
+without publishing new messages and confirm that committed records are not
+emitted again. The current evidence reports this scenario. GCS contains the
+matching two-row Parquet object, one DLQ object, and the test group's committed
+offset is 3.
 
-- `bronze/kafka/clickstream-step3-check/event_date=.../*.parquet`;
-- `bronze/_dlq/clickstream-step3-check/rejection_date=.../*.json`.
+The consumer is at-least-once within Kafka retention. Writes and offset commits
+are not one transaction; replay can duplicate objects. Invalid messages are
+durably written to the DLQ before committing, so a failed DLQ write prevents
+the poll from committing.
 
-Confirm the second valid event landed after the rejection and record its offset.
-Restart the **same** group without publishing new events: no already committed
-records should be reprocessed. To rerun the full scenario, publish new messages
-or deliberately choose a new test group; do not reset the production group.
-Test-topic records remain isolated from the business clickstream.
+## 5. Record evidence and handover
 
-## 6. Capture failures, measurements and key/slot cleanup
+Add only safe summaries to `docs/evidence/step3/`. Record:
 
-Measure from your real Exercise 1 / running source: duplicate counts after a
-forced restart, changes missed by the ID cursor, and retained WAL bytes before
-and after stopping/resuming the connector. Record conditions and timestamps.
-Do not substitute the committed local simulations for these live measurements.
-Exercise INSERT, UPDATE and DELETE on approved synthetic test rows and compare
-the source, connector and custom-extractor results. Do not delete existing
-business records just to obtain evidence.
+- the date, source identity and job command;
+- the extractor's row/batch count, before/after cursor and object paths;
+- Kafka topic, test group, published offsets, accepted/rejected counts,
+  committed offsets and restart result;
+- GCS object existence, sizes and Parquet schema/provenance, checked by an
+  authorised operator;
+- CDC slot owner, plugin, activity, retained WAL and any owner-approved action;
+- the precise scope of checks performed and any limitations.
 
-Inventory slots with `ingestion/airbyte/inspect_slots.sql`. Stop the associated
-reader, confirm slot ownership/inactivity, then drop only unused group test
-slots. Keep the active CDC slot. Record any HMAC/service-account key created for
-the connector and who can revoke it. Mark unused HMAC keys inactive and delete
-them through the project administrator; do not revoke the live connector's key
-while it is still needed. The Python jobs themselves create no such keys.
-
-## Evidence to return in the group branch
-
-- [ ] Platform/source/destination connector versions and redacted settings.
-- [ ] Real catalog summary proving all seven streams and secret-table exclusion.
-- [ ] Two successful incremental/CDC jobs, actual GCS object paths and metadata.
-- [ ] SQL cursor persisted across restart, with measured duplicate/missed cases.
-- [ ] Real malformed-event publish offsets, matching DLQ object and later valid event.
-- [ ] Actual WAL-retention measurements and confirmed unused-slot cleanup.
-- [ ] Credential owner, granted scope and key revocation/unused-key cleanup record.
-
-Place safe summaries in `docs/evidence/step3/`, update the ADR/failure table and
-architecture status, then commit your work for group review. Never commit raw
-event bodies, personal source rows, passwords, HMAC secrets or key JSON files.
+Do not commit raw source rows, event bodies, passwords, ADC files, service
+account keys or connector exports. Keep operator evidence distinct from local
+simulations. Update the ADR and architecture only with observed results, and
+preserve the current local checkpoint unless the source identity is deliberately
+changed.

@@ -1,16 +1,23 @@
 # Data flows
 
-## Scope and evidence
+One row per flow: where the data comes from, what it is, who uses it, how often
+it moves, and in which format.
 
 Albert's Marketplace serves a European beauty-products shop. Its operational
 database stores customers, orders, order lines, reviews and shipping details.
 The student platform will isolate analytical reads from customer-serving
 systems and publish daily demand by product and country.
 
-Existing source flows are established from code and documentation, not a source
-runtime check. F07 is the verified Step 2 cloud upload. Step 3 Python code has
-passed local tests; F08–F10 still need live validation on the Docker operator's
-machine. Their frequencies remain design goals until that run.
+Existing source flows are established from code and documentation. F07 is the
+verified Step 2 cloud upload. Step 3 Route 3 (no Airbyte) is complete: the
+orders extractor, clickstream consumer and seven-table Debezium CDC sink have
+live Bronze evidence. The 2026-11-05 evidence includes CDC INSERT/UPDATE/DELETE
+plus tombstone validation and restart/resume; see
+[CDC runtime evidence](evidence/step3/cdc-status.json). GCS counts and the
+orders watermark are point-in-time values, not expected outputs from every
+fresh clone. The separate [Bronze verification](evidence/step3/bronze-verification.json)
+records the inventory and catch-up watermark. F09-F10 frequencies are design
+goals, not measured schedules.
 
 ## Flow matrix
 
@@ -23,17 +30,17 @@ machine. Their frequencies remain design goals until that run.
 | F05 | Existing source code | Live traffic generator | Simulated sign-ups, product lookups, cart changes, checkout and warehouse advancement | FastAPI storefront | Continuous, on an accelerated simulation clock | HTTP and JSON; simulated-time header |
 | F06 | Existing source code | Live traffic generator | `product_viewed`, `added_to_cart`, `order_placed` | Kafka topic `clickstream` | Per generated event | UTF-8 JSON, keyed by `buyer_id`, with `schema_version` |
 | F07 | Verified: Step 2 | Local marketplace CSV exports for the seven tables listed below; source hashes recorded | Initial raw relational snapshots, all columns retained as strings | `gs://data-engineering-i1-marketplace-group/bronze/snapshot/`, `europe-west1` | Completed 2026-10-26; another run creates a distinct load | CSV input, Snappy Parquet partitioned by `ingestion_date` and `load_id` |
-| F08 | CDC setup prepared; deployment pending | Operational PostgreSQL | `orders`, `order_items`, `review`, `product_reviews`, `product`, `customer_shipping`, `shipping_details` | Airbyte CDC, then `bronze/postgres/`; seven-table selection excludes password/card tables | Initial snapshot, then hourly target | Connector records, Parquet/Snappy, ingestion-date/sync partitions |
-| F09 | Implemented/local tested; live pending | Operational PostgreSQL `orders` | New visible orders after a saved `order_id`; updates/deletes/late lower IDs missed | psycopg SQL extractor, then `bronze/python/orders/` | Automatic polling every 60 seconds while running | Native SQL values, Parquet/Snappy, ingestion-date partitions |
-| F10 | Implemented/local tested; live pending | Kafka `clickstream` | Schema-v1 accepted events; invalid original bytes, reason and time | Python consumer, GCS Bronze and `bronze/_dlq/` | Continuous polls; commit only after output persistence | Raw JSON bytes + metadata in Parquet by UTC event date; DLQ JSON by rejection date |
+| F08 | Implemented; live snapshot, seven-table CDC, synthetic CRUD/tombstone and restart/resume verified | Seven tables in `marketplace_bronze_publication` | Debezium snapshot and `pgoutput` change events; raw envelopes and tombstones preserved | Debezium Connect uses existing `marketplace_bronze_slot`; Python consumer writes GCS Bronze | `bronze/cdc/<table>/ingestion_date=.../` | Snapshot overlaps prior baseline; TRUNCATE requires coordinated full snapshot/reset; at-least-once with topic/partition/offset provenance |
+| F09 | Implemented; 50 GCS objects / 225,381 rows verified after catch-up | Operational PostgreSQL `orders` | New visible orders after a saved `order_id`; updates/deletes/late lower IDs missed | psycopg SQL extractor, then `bronze/python/orders/` | Polling target 60 seconds while running | Native SQL values, Parquet/Snappy, ingestion-date partitions |
+| F10 | Implemented; 129 main-topic objects / 29,144 rows and isolated test/DLQ objects verified | Kafka `clickstream` | Schema-v1 accepted events; invalid original bytes, reason and time | Python consumer, GCS Bronze and `bronze/_dlq/` | Continuous polls; commit only after output persistence | Raw JSON bytes + metadata in Parquet by UTC event date; DLQ JSON by rejection date |
 | F11 | Planned: Step 4 | GCS Bronze | Selected relational tables needed by the demand workload | Native BigQuery working tables | After a successful ingestion batch | Parquet loads into native tables |
 | F12 | Planned: Lesson 5 | Selected raw BigQuery tables and Bronze evidence | Typed, reconciled orders and lines; one country mapping per buyer | BigQuery Silver transformations | Daily target | SQL and native tables |
 | F13 | Planned: Lesson 5 | BigQuery Silver | Units sold per product, country and order date | BigQuery Gold star, then analyst / business reports | Daily refresh; reports on demand | SQL tables, views and query results |
 
-The Step 3 connector is the authoritative relational ingestion path. The
-custom `orders` extractor is a separate learning and comparison path; it must
-not be unioned into the connector data used for demand. Initial CSV snapshots
-and subsequent connector snapshots also need an explicit handover boundary.
+The custom `orders` extractor is insert-only incremental ingestion, not CDC.
+Debezium CDC runs as a separate path and does not change those cursor semantics.
+Initial CSV snapshots and later extractor batches remain in separate paths;
+downstream consumers need an explicit handover boundary.
 
 ## Risk question 1: Which flows carry personal data?
 
@@ -44,23 +51,23 @@ F03 and F05 can carry sign-up details and customer identifiers. F04 reads
 buyer identifiers. F06 and F10 contain `buyer_id` and `session_id`, which link
 behaviour across events; an `order_placed` event also links to an order.
 
-The seven selected tables in F07/F08 avoid `customer` and `payment_details`,
-but still contain buyer/customer IDs, postal addresses, phone numbers and
-review free text. F09 carries `buyer_id`. Those identifiers and addresses can
-continue into F11/F12 and require restricted access. F13 should expose only
-product, country and date dimensions plus aggregate measures.
+The seven tables in F07 contain buyer/customer IDs, postal addresses, phone
+numbers and review free text. F09 carries `buyer_id`; F10 contains `buyer_id`
+and `session_id`. Those identifiers and addresses require restricted access.
+F13 should expose only product, country and date dimensions plus aggregate
+measures.
 
 Keep `customer.pwd` and `payment_details.card_no` / `cvv` outside the selected
-export scope. If those tables are added later, exclude these columns in the
-connector before any Bronze write and retain evidence of the configuration.
+export scope. If those tables are added later, exclude these columns before
+any Bronze write and retain evidence of the configuration.
 Once a record is admitted into Bronze, retain its values and columns without
 cleaning or deduplication. Capture the field inventory in Step 2's dictionary.
 
 ## Risk question 2: Which consumers read customer-serving systems?
 
-The storefront (F03), traffic generator (F04), PostgreSQL connector (F08) and
-custom extractor (F09) read the operational database. Extraction can compete
-with checkout for connections and I/O. Use a read-only ingestion identity,
+The storefront (F03), traffic generator (F04) and custom extractor (F09) read
+the operational database. Extraction can compete with checkout for connections
+and I/O. Use a read-only ingestion identity,
 bounded batch sizes and a measured schedule. The custom cursor path only
 captures new, visible IDs: updates, deletes and transactions committing behind
 the saved cursor need separate handling and must be reported as limitations.
@@ -78,9 +85,9 @@ These controls are target requirements until credentials and pipelines exist.
 - A purchase appears in both PostgreSQL and an `order_placed` Kafka event.
   PostgreSQL order lines supply units sold. Clickstream supplies behavioural
   analysis; adding its purchases to relational sales counts the same sale twice.
-- CSV snapshots, connector batches, the custom extractor and replayed Kafka
-  batches can overlap. Keep paths distinct, retain batch/event provenance and
-  select the authoritative inputs before curation.
+- CSV snapshots, custom extractor batches and replayed Kafka batches can
+  overlap. Keep paths distinct, retain batch/event provenance and select the
+  intended inputs before curation.
 - A buyer can have several addresses. Joining every address to each order
   multiplies its lines. Resolve exactly one default country per buyer; route
   missing or ambiguous mappings to an unknown country and an exception list.

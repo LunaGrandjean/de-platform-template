@@ -1,147 +1,151 @@
-# Step 3: Three Roads into Bronze
+# Step 3: Python ingestion (Route 3, no Airbyte)
 
-The Python implementation and local fault-injection checks are ready. **Live
-PostgreSQL, Kafka and Airbyte validation is pending** on a teammate's machine.
-Docker cannot currently start on Luna's managed Windows laptop. Local test
-success must not be recorded as proof of three deployed ingestion paths.
+**Status: complete.** The orders cursor, clickstream flow and seven-table CDC
+pipeline have live evidence. See the [CDC run evidence](../docs/evidence/step3/cdc-status.json)
+and the [fresh-clone reproduction guide](../docs/runbooks/step3-reproduction.md).
 
-## Responsibilities
+The selected route uses a hand-written PostgreSQL orders extractor, a Python
+clickstream consumer, and Debezium with a Python CDC sink. Airbyte is not part
+of this route. Local checks and an operator-reported live run are recorded. A
+read-only GCS audit verified the
+Step 2 snapshot and the Step 3 Parquet/DLQ objects; see
+[`bronze-verification.json`](../docs/evidence/step3/bronze-verification.json)
+and [`route3-live-run.json`](../docs/evidence/step3/route3-live-run.json).
+The last one-shot catch-up wrote 237 rows through order ID 225405; the source
+had two rows beyond that watermark at the post-run check. See the
+[Route 3 runbook](../docs/runbooks/step3-docker-handoff.md) and
+[failure-mode notes](../docs/ingestion-failure-modes.md).
 
-| Owner | Work |
-|---|---|
-| Luna | Python jobs, schema, local tests, failure-mode analysis and documentation |
-| Docker operator: group member to assign | Start the provided source stack, configure Airbyte, arrange approved access and collect live evidence |
-| Group / project administrator | Authorise GCP identities and connector credentials; review access and key revocation |
+## Install and local checks
 
-Use the [Docker handoff](../docs/runbooks/step3-docker-handoff.md) for the live
-setup. Each member uses their own credentials. No account/password/key files
-are shared through Git.
-
-## Install and check locally with uv
-
-From the repository root, use Python 3.12 and the locked dependencies:
+Use Python 3.12 and the locked project dependencies:
 
 ```powershell
 $env:UV_CACHE_DIR = Join-Path (Get-Location) 'data/uv-cache'
 uv sync --locked
-uv run --locked -m unittest discover -s tests -p test_ingestion.py -v
 ```
 
-These tests use synthetic rows, a local object sink and fake SQL fetch / Kafka
-commit callbacks. They exercise real Parquet writing, checkpoints, validation
-and failures, without a broker, database or cloud call. The
-[local evidence](../docs/evidence/step3/local-checks.json) records that limited
-scope. The older Bronze-preservation checks remain in `tests/test_bronze_snapshot.py`.
+The recorded local tests use synthetic SQL rows, local object storage and fake
+Kafka commit callbacks. They exercise Parquet writing, checkpoints, validation
+and failures without PostgreSQL, Kafka or GCS calls. The results are recorded
+in [`local-checks.json`](../docs/evidence/step3/local-checks.json); they are not
+live delivery evidence.
 
 ## Runtime configuration
 
-Copy `.env.example` to the ignored `.env`, then fill the PostgreSQL connection
-and the operator's Kafka settings. `python-dotenv` loads this file without
-overwriting existing environment variables. For cloud writes, set
-`GCP_PROJECT_ID` and `BRONZE_BUCKET` and use your existing local ADC. No Google
-Cloud CLI installation is required by the Python jobs.
+Copy `.env.example` to the ignored `.env` and configure the PostgreSQL, Kafka
+and GCP settings for the operator's environment. `python-dotenv` reads the
+file without replacing existing environment variables. Cloud writes use the
+operator's own Application Default Credentials (ADC). Never commit passwords,
+ADC files, service-account keys or raw connector exports.
 
-The example's plaintext/no-SSL settings are for the operator's local Docker
-stack or an approved encrypted tunnel. They are not settings for exposing
-PostgreSQL/Kafka directly on the public internet. The simplest setup is to run
-all live jobs on the Docker operator's machine; Luna can write and test the
-code without Docker and connect remotely later if authorised access exists.
+The example's plaintext settings target the local Docker stack or an approved
+encrypted tunnel. Do not expose the source's unauthenticated PostgreSQL or
+Kafka ports to the public internet. The Kafka broker advertises `localhost` to
+host clients; a remote operator needs a properly configured tunnel/listener.
 
-## Path 1: PostgreSQL connector
+## PostgreSQL orders extractor
 
-Follow [the handoff](../docs/runbooks/step3-docker-handoff.md). The
-[connection plan](airbyte/connection-plan.json) is a human-readable proposal,
-**not an applied Airbyte export**. It selects the seven required tables, CDC,
-Incremental/Append, Parquet/Snappy and a dedicated `bronze/postgres/` prefix.
-`customer` and `payment_details` are unselected; their secret fields never need
-to reach Bronze. Do not enable automatic selection of newly discovered tables.
-
-Once the operator exports the actual configured catalog to ignored local data,
-check it and produce a credential-free selection summary:
-
-```powershell
-uv run --locked ingestion/validate_connector_export.py data/airbyte-configured-catalog.json
-```
-
-The gate rejects missing/extra selected tables, secret columns, overwrite modes
-and accidental field omissions. A passing catalog is still not evidence of a
-successful sync: commit redacted live settings, actual job IDs and object counts.
-
-## Path 2: Hand-written SQL extractor
-
-Once the real database is reachable:
+Run one bounded window, then use the polling mode when continuous ingestion is
+intended:
 
 ```powershell
 uv run --locked ingestion/extract_orders.py --once
 uv run --locked ingestion/extract_orders.py
 ```
 
-The first command drains one bounded order-ID window. The second keeps polling
-every 60 seconds. Both use psycopg directly, parameterised SQL and a read-only
-connection. Initial connection failures use up to five attempts, with waits of
-1, 2, 4 and 8 seconds. A query/storage/authentication failure stops the job;
-restart it after resolving the cause. No successful checkpoint is discarded.
+The extractor reads only `public.orders`, uses parameterised SQL and a
+read-only connection, and writes Parquet under
+`bronze/python/orders/ingestion_date=.../`. Initial connection failures retry
+up to five times with 1, 2, 4 and 8 second waits. Unrecovered query, storage or
+authentication errors stop the job; restart it after resolving the cause.
 
-Cursor state is `data/state/orders.json`, with an OS lock preventing concurrent
-writers on that file. One operator owns this state file. Upload each batch,
-then atomically save the cursor; a crash in between can duplicate rows. Do not
-delete or share the checkpoint casually. Change `SOURCE_ID` and choose a new
-state file deliberately after a source rebuild. A smaller source maximum is
-detected, but other source resets cannot always be detected.
+Its cursor is `data/state/orders.json`. An OS lock prevents concurrent writers
+on the same file. One operator owns this checkpoint. The extractor uploads a
+batch before atomically saving its cursor, so a crash between those actions can
+replay rows. Preserve the checkpoint across restarts and choose a new
+`SOURCE_ID` and state file deliberately after a source rebuild.
 
-The `order_id` cursor captures new visible higher IDs. It misses updates,
-deletes and lower IDs committing after the watermark has advanced. It does
-not add Airbyte metadata or remove business duplicate orders. This path is
-kept separate from the authoritative connector stream.
+The `order_id` cursor captures newly visible higher IDs. It does **not** capture
+updates, deletes or lower IDs that commit after the watermark advances. It is
+not CDC and does not make the orders path authoritative for change history.
+The current checkpoint is recorded in the ignored local `data/state/` folder;
+the live evidence file records the reported run without copying source rows.
 
-For testing a real SQL connection without writing to GCS, use **a separate test
-state file** so local-only output cannot advance the production cursor:
+To test PostgreSQL while keeping production state and GCS untouched, provide a
+separate state file and local sink:
 
 ```powershell
 uv run --locked ingestion/extract_orders.py --once --local-output data/step3-local --state-file data/state/orders-local-test.json
 ```
 
-The CLI rejects local output without an explicit state file different from its
-default GCS state file. Keep any other production checkpoint separate as well.
+The CLI rejects local output if it could advance the default production state.
 
-## Path 3: Kafka consumer
+## Kafka clickstream consumer
 
-Once Kafka is reachable:
+Run the consumer against the `clickstream` topic:
 
 ```powershell
 uv run --locked ingestion/consume_clickstream.py
 ```
 
-The consumer enforces [schema v1](clickstream.schema.json), including UUIDs,
-timestamps, event-specific fields and nested order items. Unknown versions or
-fields, invalid JSON/UTF-8, duplicate JSON keys and null messages are rejected.
-Accepted Parquet stores the complete original bytes plus source fields and
-transport metadata; optional/nested event fields remain in `raw_value`.
+It validates messages against [schema v1](clickstream.schema.json). Invalid
+UTF-8/JSON, duplicate JSON keys, unknown fields or versions, and invalid event
+envelopes are sent to `bronze/_dlq/`. Accepted Parquet keeps the original bytes,
+common event fields and Kafka provenance. It partitions by UTC `event_time`;
+late events can therefore create objects in earlier event-date partitions.
 
-Partition accepted events by **UTC `event_time`**, because it represents the
-simulated business event; `emitted_at` is the producer's real wall clock. Late
-events may therefore create files in older partitions. Preserve both original
-timestamps and the exact payload. Invalid events use rejection date and retain
-the original bytes as base64, rejection reason and timestamp under `bronze/_dlq/`.
+Auto-commit is disabled. All accepted and rejected objects in a poll must be
+durable before the consumer commits each partition's next offset. A failed
+write prevents that poll from committing. A crash after writing but before
+commit can produce duplicate objects on replay. The guarantee is at-least-once
+within Kafka retention, not exactly-once; expired Kafka records cannot be
+recovered by this consumer.
 
-Auto-commit is disabled. All valid and DLQ objects in a poll must be durable
-before synchronously committing each partition's **next** offset. Failed writes
-prevent commit; a crash after writes or a failed commit can cause duplicates on
-replay. This is at-least-once within Kafka retention, not exactly-once. A new
-consumer group starts at the earliest retained event. Expired offsets can reset
-to that earliest available offset, so loss beyond retention is not recovered.
-
-For local-sink tests of a real broker, use a separate group ID so local writes
-cannot advance the production consumer group:
+For a live broker test, use a dedicated topic and group as described in the
+[runbook](../docs/runbooks/step3-docker-handoff.md). Local-sink tests against a
+real broker must use a separate group ID so they cannot advance the configured
+GCS consumer group:
 
 ```powershell
 uv run --locked ingestion/consume_clickstream.py --local-output data/step3-local --group-id marketplace-local-test
 ```
 
-The CLI rejects local output if no separate group ID is supplied or if it equals
-the configured GCS consumer group.
+## CDC status
 
-The [live malformed-event procedure](../docs/runbooks/step3-docker-handoff.md)
-uses a separate topic and expects two valid events and one DLQ event. It has
-not been run on this laptop. In Lesson 6, the group will package these jobs in
-Dockerfiles; this step does not add new job images.
+The no-Airbyte CDC path uses Debezium Connect with the existing
+`marketplace_bronze_slot` and `marketplace_bronze_publication`. It snapshots the
+seven published tables, then streams row-level changes into table-specific
+Kafka topics. Register or update the connector after starting Compose:
+
+```powershell
+$env:UV_CACHE_DIR = Join-Path (Get-Location) 'data/uv-cache'
+docker compose up -d debezium-connect
+uv run --locked ingestion/configure_cdc.py
+uv run --locked ingestion/consume_cdc.py --batch-size 5000
+```
+
+The connector config uses the local ignored `.env` `PGUSER`, `PGPASSWORD`,
+`PGDATABASE`, and `PGPORT`; the password is sent to local Kafka Connect REST
+and is never printed. It will not drop the slot when stopped. The consumer
+stores raw Debezium key/value bytes, tombstones, headers, topic, partition,
+offset, and Kafka timestamp under `bronze/cdc/<table>/ingestion_date=.../`.
+Offsets are committed only after all Parquet objects for that poll are durable.
+This is at-least-once delivery; a crash after writing but before commit can
+leave duplicate rows, reconciled by topic/partition/offset. Debezium initial
+snapshot records overlap the earlier `bronze/snapshot/` and orders backfill;
+they are a separate CDC baseline, not additive table counts. The PostgreSQL
+publication does not publish `TRUNCATE`; treat any source truncate as a reset
+and coordinate a full snapshot plus downstream reconciliation before resuming.
+
+Kafka Connect REST is published only at `127.0.0.1:18083`; it has no REST
+authentication, so keep it loopback-only. See the [CDC inventory and runtime
+evidence](../docs/evidence/step3/cdc-status.json).
+
+## Airbyte preparation files
+
+Files under `ingestion/airbyte/` and `validate_connector_export.py` are
+unapplied preparation artifacts from the alternative connector route. They are
+not used by the selected Route 3 jobs and are not evidence of a deployed
+connector. They are retained in the repository for history/reference; no
+Airbyte installation, credentials or connection are required to run Route 3.

@@ -27,7 +27,7 @@ events. The platform targets daily units sold by product and country.
 |---|---|---|
 | Luna Grandjean | [@LunaGrandjean](https://github.com/LunaGrandjean) | Initial platform design and documentation |
 | Omar Abdellatif | [@abdellatifomar61-ship-it](https://github.com/abdellatifomar61-ship-it) | To be documented |
-| Malek Saoudi | [@Msaoudi115](https://github.com/Msaoudi115) | To be documented |
+| Malek Saoudi | [@Msaoudi115](https://github.com/Msaoudi115) | Step 3 live Docker/Debezium deployment and evidence |
 | Anas Mossad | [@realay04](https://github.com/realay04) | To be documented |
 | Emile Gadenne | [@egadenne-ai](https://github.com/egadenne-ai) | Step 4 BigQuery warehouse, costed queries and ADR 0004 |
 
@@ -94,26 +94,51 @@ Generated CSV/Parquet data and credentials are excluded from Git. The committed
 
 Group-member Google access still needs individual verification.
 
-### Step 3: Three Roads into Bronze
+### Step 3: Route 3 — Python ingestion (no Airbyte) — COMPLETE
 
-The Python jobs are implemented and locally tested. A group member with working
-Docker will run PostgreSQL, Kafka and Airbyte and collect live evidence. **Step 3
-is not yet deployed/complete**; local tests are not a substitute for real source,
-broker and connector validation.
+**Step 3 is complete.** The orders cursor, clickstream consumer and Debezium
+CDC path are implemented; live Bronze writes, CDC CRUD events and restart/resume
+were verified. The point-in-time evidence is in
+[`cdc-status.json`](docs/evidence/step3/cdc-status.json). For a fresh clone,
+follow the [Step 3 reproduction guide](docs/runbooks/step3-reproduction.md).
+
+The group selected Route 3 from the course setup: use a hand-written psycopg
+extractor, Python Kafka consumers and Debezium Connect for CDC; Airbyte is not
+part of this route.
+`psycopg[binary]` is included in the locked project environment, installed with
+`uv sync --locked`.
+
+The operator-reported Route 3 run on 2026-11-05 first wrote 13 new orders in
+one batch, advancing the cursor to 225168. The Bronze audit verified the
+existing paths, then a one-shot catch-up wrote 237 rows through order ID
+225405. The orders prefix now has 50 Parquet objects and 225,381 rows; the
+current source had two more rows at the post-run check. There are also 129 main
+clickstream objects (29,144 rows), two rows in the isolated Kafka test topic,
+and one test DLQ object. The orders prefix includes a 225,000-row backfill from
+ID 1, so it overlaps the Step 2 orders snapshot and must not be summed with it.
+Details: [Bronze verification](docs/evidence/step3/bronze-verification.json)
+and [Route 3 run evidence](docs/evidence/step3/route3-live-run.json).
 
 | Deliverable | Content / status |
 |---|---|
-| [Ingestion guide](ingestion/README.md) | uv installation, job commands, checkpoints and delivery guarantees |
-| [Orders extractor](ingestion/extract_orders.py) | Parameterised SQL, persistent cursor, single-writer lock and bounded connection retries |
-| [Kafka consumer](ingestion/consume_clickstream.py) and [schema v1](ingestion/clickstream.schema.json) | Validation, complete raw payload, Parquet, DLQ and commit-after-write behaviour |
-| [Connector plan](ingestion/airbyte/connection-plan.json) | Seven-table CDC / Append plan; not an applied configuration export |
-| [Docker handoff](docs/runbooks/step3-docker-handoff.md) | Teammate setup, malformed-event publish, real measurements and cleanup checklist |
-| [Ingestion ADR](docs/adr/0003-ingestion-modes.md) and [failure modes](docs/ingestion-failure-modes.md) | Chosen modes, honest gaps, credential handling and local failure evidence |
-| [Dictionary](docs/data-dictionary.md) and [architecture](docs/architecture.md) | Prepared schemas and three paths, with live status explicitly pending |
+| [Ingestion guide](ingestion/README.md) | Locked dependencies, commands, checkpoints and delivery guarantees |
+| [Orders extractor](ingestion/extract_orders.py) | Hand-written parameterised psycopg extraction with persistent cursor and bounded retries |
+| [Kafka consumer](ingestion/consume_clickstream.py) and [schema v1](ingestion/clickstream.schema.json) | Parquet/DLQ implementation; main and isolated-test objects and Parquet footers verified in GCS |
+| [Debezium CDC connector](ingestion/configure_cdc.py) and [Bronze consumer](ingestion/consume_cdc.py) | Existing PostgreSQL publication/slot into Kafka and append-only `bronze/cdc/` |
+| [CDC runtime evidence](docs/evidence/step3/cdc-status.json) | Snapshot, seven-table output, slot/WAL, heartbeat, restart/resume and synthetic CRUD verification |
+| [Route 3 evidence](docs/evidence/step3/route3-live-run.json) and [Bronze audit](docs/evidence/step3/bronze-verification.json) | Reported job run plus read-only GCS inventory, schemas, row counts and freshness check |
+| [Failure modes](docs/ingestion-failure-modes.md) and [architecture](docs/architecture.md) | Cursor limitations, at-least-once delivery and layer contracts |
 
-No Step 3 service-account/HMAC key, CDC slot or cloud IAM grant is created by the
-Python preparation. The operator must provide the actual connector settings,
-successful jobs, GCS/DLQ objects and WAL/key-cleanup evidence before completion.
+The orders cursor captures visible higher `order_id` values; it does not detect
+updates, deletes or lower IDs that commit late. Debezium uses the existing
+publication and slot for row-level CDC on seven tables; the Python CDC consumer
+preserves raw envelopes and tombstones with Kafka provenance in `bronze/cdc/`.
+See [CDC runtime evidence](docs/evidence/step3/cdc-status.json). Step 4 exposes the Python orders and main clickstream prefixes as external
+tables; native sales tables still use the pinned Step 2 snapshot.
+
+The evidence counts and object names describe the source and GCS bucket at
+their recorded timestamps. A fresh clone creates new local state and later
+objects, so it reproduces the pipeline and checks, not byte-identical counts.
 
 ### Step 4: SQL Warehouse
 

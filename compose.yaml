@@ -176,6 +176,44 @@ services:
       kafka:
         condition: service_healthy
 
+  # Internal Kafka Connect topics. One broker means replication factor 1.
+  connect-init:
+    image: apache/kafka:4.3.1
+    entrypoint: ["/bin/bash", "/init-cdc-topics.sh"]
+    volumes:
+      - ./ingestion/init_cdc_topics.sh:/init-cdc-topics.sh:ro
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # Debezium Connect reads the existing pgoutput slot; connector config is
+  # registered separately by ingestion/configure_cdc.py from the ignored .env.
+  debezium-connect:
+    image: quay.io/debezium/connect:3.7.0.Final
+    ports:
+      - "127.0.0.1:18083:8083"
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: marketplace-connect-v1
+      CONFIG_STORAGE_TOPIC: connect-configs
+      OFFSET_STORAGE_TOPIC: connect-offsets
+      STATUS_STORAGE_TOPIC: connect-status
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_FLUSH_INTERVAL_MS: 10000
+    depends_on:
+      db:
+        condition: service_healthy
+      connect-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   # Live traffic: shopping sessions through the storefront API and clickstream
   # events to Kafka, on a simulated clock (docs/build-spec.md §5.5, §9.17)
   load-generator:

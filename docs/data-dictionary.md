@@ -123,12 +123,13 @@ This keeps `customer.pwd`, `payment_details.card_no` and `payment_details.cvv`
 out of Bronze. `customer.fname`, `lname`, `email`, `phone` and
 `payment_details.billing_address` / `expiry_date` would also require personal-data
 classification if these tables were introduced. Exclude password and card-secret
-columns in future connector configuration before any Bronze write; do not rely
-on a later SQL model to remove them.
+columns from any future source selection before a Bronze write; do not rely on
+a later SQL model to remove them.
 
-The following Step 3 sections describe implemented/planned schemas, **not new
-observed GCS tables**. No live connector or Kafka deployment has been verified.
-These fields are not part of the Step 2 CSV snapshot.
+The following Step 3 sections describe implemented schemas. GCS Parquet object
+footers were checked during the read-only audit; no row values or DLQ body were
+read. The Step 2 CSV snapshot remains a separate load. See
+[`bronze-verification.json`](evidence/step3/bronze-verification.json).
 
 ## Step 3: custom SQL orders
 
@@ -194,24 +195,16 @@ Malformed source rows are not silently dropped. Their DLQ JSON fields are
 `rejected_at_utc`. The original payload/key may contain personal data and the
 DLQ uses the same restricted raw-data access expectations as Bronze.
 
-## Step 3: expected Airbyte metadata
+## Step 3: connector metadata
 
-The [GCS 1.0 migration reference](https://docs.airbyte.com/integrations/destinations/gcs-migrations)
-documents these field names. They belong to the connector, not the hand-written
-extractor. **The installed destination version and actual Parquet physical
-representation still need inspection**; do not label this as an observed schema.
-
-| Field | Expected meaning / representation | Personal data? |
-|---|---|---|
-| `_airbyte_raw_id` | String row identifier assigned during extraction/loading; not a source primary key and not a business-deduplication key | Indirect: linkable ingestion record |
-| `_airbyte_extracted_at` | Extraction timestamp; representation depends on destination/output (epoch-ms or logical timestamp must be checked) | No direct identifier |
-| `_airbyte_meta` | Structured metadata, including sync/change information; inspect actual nested fields and types | Possible if diagnostic change details include source values |
-| `_airbyte_generation_id` | Integer generation identifier; distinguishes refresh generations | No |
-
-Inspect and document any emitted CDC fields such as deletion markers and LSNs
-before declaring the connector dictionary complete. The configured catalog
-checker validates source fields/modes; it does not manufacture Airbyte metadata
-or certify that a destination has produced those fields.
+The selected route does not use Airbyte, so `_airbyte_*` fields are not part of
+the Route 3 schemas and must not be assumed to exist in Bronze. The orders
+extractor records `source_id`, `source_table`, and exclusive/inclusive ID
+watermarks in Parquet metadata. The Kafka consumer records topic, partition,
+offset, key, broker timestamp and ingestion time as Parquet columns. These are
+the observed-by-design provenance fields for the selected Python jobs; verify
+their physical representation against the actual GCS objects before claiming
+live schema validation.
 
 ## Step 4: BigQuery tables
 
