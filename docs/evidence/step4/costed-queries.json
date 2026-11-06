@@ -1,7 +1,6 @@
 {
-  "costs_recalculated_at_utc": "2026-11-06T10:27:58.630187+00:00",
-  "measured_at_utc": "2026-11-05T13:26:21.137614+00:00",
-  "note": "Original 2026-11-05 uncached jobs and byte counts preserved. Cost formula corrected on 2026-11-06 from recorded processed bytes; billed-byte cost is separate. These costs are before the shared first-TiB allowance; no cloud rerun is implied.",
+  "measured_at_utc": "2026-11-06T10:45:12.853842+00:00",
+  "note": "Real runs with use_query_cache=False. Course cost uses processed bytes; billed-byte cost is separate. Both are before the shared monthly allowance.",
   "price_per_tib_usd": 7.5,
   "products": {
     "best": "B085BB7B1M",
@@ -17,7 +16,49 @@
           "bytes_processed": 13577448,
           "cache_hit": false,
           "dry_run_bytes": 0,
-          "job_id": "f3d06867-c912-4fcc-841a-2feb4e024309",
+          "job_id": "151e6e3c-d700-48e3-93db-303c8fd51b7c",
+          "read_steps": [
+            {
+              "stage": "S00: Input",
+              "substeps": [
+                "$10:order_id, $11:order_date",
+                "FROM data-engineering-i1.g07_bronze.orders",
+                "WHERE and(greater_or_equal($11, '2026-08-01'), less($11, '2026-09-01'))"
+              ]
+            },
+            {
+              "stage": "S02: Build",
+              "substeps": [
+                "$10, $11",
+                "FROM __stage00_output"
+              ]
+            },
+            {
+              "stage": "S03: Join+",
+              "substeps": [
+                "$1:order_id, $2:p_id, $3:qty",
+                "FROM data-engineering-i1.g07_bronze.order_items"
+              ]
+            },
+            {
+              "stage": "S03: Join+",
+              "substeps": [
+                "$72",
+                "FROM __stage02_output"
+              ]
+            },
+            {
+              "stage": "S04: Output",
+              "substeps": [
+                "$61, $60, $30",
+                "FROM __stage03_output"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_bronze.order_items",
+            "data-engineering-i1.g07_bronze.orders"
+          ],
           "rows_returned": 8649,
           "sql": "SELECT o.order_date, i.p_id, SUM(SAFE_CAST(i.qty AS INT64)) AS units\nFROM `data-engineering-i1.g07_bronze.order_items` AS i JOIN `data-engineering-i1.g07_bronze.orders` AS o USING (order_id)\nWHERE o.order_date >= '2026-08-01' AND o.order_date < '2026-09-01'\nGROUP BY 1, 2",
           "status": "ran",
@@ -25,24 +66,56 @@
           "usd_from_billed_bytes_before_allowance": 0.000143051147
         },
         "native_format_date_filter": {
-          "error": "400 POST https://bigquery.googleapis.com/bigquery/v2/projects/data-engineering-i1/jobs?prettyPrint=false: Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination",
+          "error": "400 POST https://bigquery.googleapis.com/bigquery/v2/projects/data-engineering-i1/jobs?prettyPrint=false: Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination\n\nLocation: europe-west1\nJob ID: a84ba33d-a0ef-4b11-98cb-76284d56c7d7\n",
+          "error_details": [
+            {
+              "domain": "global",
+              "location": "q",
+              "locationType": "parameter",
+              "message": "Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination",
+              "reason": "invalidQuery"
+            }
+          ],
           "sql": "SELECT order_date, p_id, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE FORMAT_DATE('%Y-%m', order_date) = '2026-08'\nGROUP BY 1, 2",
           "status": "rejected"
         },
         "native_range_filter": {
           "bytes_billed": 10485760,
-          "bytes_processed": 277004,
+          "bytes_processed": 242172,
           "cache_hit": false,
-          "dry_run_bytes": 277004,
-          "job_id": "849fe406-e250-49ad-bc26-dd4f4600bbf3",
+          "dry_run_bytes": 242172,
+          "job_id": "b66c9d41-8a03-4f67-bae1-c48733eb4fac",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$10:order_date, $11:p_id, $12:units",
+                "FROM data-engineering-i1.g07_warehouse.daily_demand",
+                "WHERE and(greater_or_equal($10, 20666), less($10, 20697))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines",
+            "data-engineering-i1.g07_warehouse.daily_demand"
+          ],
           "rows_returned": 8649,
           "sql": "SELECT order_date, p_id, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01'\nGROUP BY 1, 2",
           "status": "ran",
-          "usd_at_on_demand_price": 1.889503e-06,
+          "usd_at_on_demand_price": 1.651906e-06,
           "usd_from_billed_bytes_before_allowance": 7.1525574e-05
         },
         "native_subquery_filter": {
-          "error": "400 POST https://bigquery.googleapis.com/bigquery/v2/projects/data-engineering-i1/jobs?prettyPrint=false: Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination",
+          "error": "400 POST https://bigquery.googleapis.com/bigquery/v2/projects/data-engineering-i1/jobs?prettyPrint=false: Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination\n\nLocation: europe-west1\nJob ID: 98725692-475d-48ef-bb5f-9b87ae358f3c\n",
+          "error_details": [
+            {
+              "domain": "global",
+              "location": "q",
+              "locationType": "parameter",
+              "message": "Cannot query over table 'data-engineering-i1.g07_warehouse.order_lines' without a filter over column(s) 'order_date' that can be used for partition elimination",
+              "reason": "invalidQuery"
+            }
+          ],
           "sql": "SELECT order_date, p_id, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date IN (SELECT DATE '2026-08-01' + n FROM UNNEST(GENERATE_ARRAY(0, 30)) AS n)\nGROUP BY 1, 2",
           "status": "rejected"
         }
@@ -53,26 +126,54 @@
       "variants": {
         "best_seller": {
           "bytes_billed": 10485760,
-          "bytes_processed": 3789632,
+          "bytes_processed": 3314892,
           "cache_hit": false,
-          "dry_run_bytes": 3789632,
-          "job_id": "fb79184d-9661-4c01-a2d0-308523ca91b5",
+          "dry_run_bytes": 3314892,
+          "job_id": "bbdcec78-165d-4241-acda-a301e46723df",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$10:order_date, $12:units, $11:p_id",
+                "FROM data-engineering-i1.g07_warehouse.daily_demand",
+                "WHERE and(greater_or_equal($10, 20332), less($10, 20697), equal($11, 'B085BB7B1M'))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines",
+            "data-engineering-i1.g07_warehouse.daily_demand"
+          ],
           "rows_returned": 12,
           "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01' AND p_id = 'B085BB7B1M'\nGROUP BY 1",
           "status": "ran",
-          "usd_at_on_demand_price": 2.5849877e-05,
+          "usd_at_on_demand_price": 2.2611575e-05,
           "usd_from_billed_bytes_before_allowance": 7.1525574e-05
         },
         "rare_product": {
           "bytes_billed": 10485760,
-          "bytes_processed": 1625204,
+          "bytes_processed": 1419544,
           "cache_hit": false,
-          "dry_run_bytes": 3789632,
-          "job_id": "ccc0fc3e-e064-48a6-bbec-776cf11c6479",
+          "dry_run_bytes": 1419544,
+          "job_id": "0f0048f6-3e64-425a-a6d3-93d27eafa563",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$10:order_date, $12:units, $11:p_id",
+                "FROM data-engineering-i1.g07_warehouse.daily_demand",
+                "WHERE and(greater_or_equal($10, 20332), less($10, 20697), equal($11, '0990995119'))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines",
+            "data-engineering-i1.g07_warehouse.daily_demand"
+          ],
           "rows_returned": 1,
           "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01' AND p_id = '0990995119'\nGROUP BY 1",
           "status": "ran",
-          "usd_at_on_demand_price": 1.1085858e-05,
+          "usd_at_on_demand_price": 9.683008e-06,
           "usd_from_billed_bytes_before_allowance": 7.1525574e-05
         },
         "rare_product_bronze_external": {
@@ -80,7 +181,50 @@
           "bytes_processed": 8879045,
           "cache_hit": false,
           "dry_run_bytes": 0,
-          "job_id": "158e80a2-745e-47af-a3f5-ba3cbb2af046",
+          "job_id": "1192a043-d912-4f02-b0d1-88f6696c4755",
+          "read_steps": [
+            {
+              "stage": "S00: Input",
+              "substeps": [
+                "$10:order_id, $11:order_date",
+                "FROM data-engineering-i1.g07_bronze.orders",
+                "WHERE and(greater_or_equal($11, '2025-09-01'), less($11, '2026-09-01'))"
+              ]
+            },
+            {
+              "stage": "S02: Build",
+              "substeps": [
+                "$10, $11",
+                "FROM __stage00_output"
+              ]
+            },
+            {
+              "stage": "S03: Join+",
+              "substeps": [
+                "$1:order_id, $3:qty, $2:p_id",
+                "FROM data-engineering-i1.g07_bronze.order_items",
+                "WHERE equal($2, '0990995119')"
+              ]
+            },
+            {
+              "stage": "S03: Join+",
+              "substeps": [
+                "$71",
+                "FROM __stage02_output"
+              ]
+            },
+            {
+              "stage": "S04: Output",
+              "substeps": [
+                "$30, $60",
+                "FROM __stage03_output"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_bronze.orders",
+            "data-engineering-i1.g07_bronze.order_items"
+          ],
           "rows_returned": 1,
           "sql": "SELECT DATE_TRUNC(SAFE_CAST(o.order_date AS DATE), MONTH) AS month, SUM(SAFE_CAST(i.qty AS INT64)) AS units\nFROM `data-engineering-i1.g07_bronze.order_items` AS i JOIN `data-engineering-i1.g07_bronze.orders` AS o USING (order_id)\nWHERE o.order_date >= '2025-09-01' AND o.order_date < '2026-09-01' AND i.p_id = '0990995119'\nGROUP BY 1",
           "status": "ran",
@@ -97,7 +241,27 @@
           "bytes_processed": 2671728,
           "cache_hit": false,
           "dry_run_bytes": 0,
-          "job_id": "04ff97f1-a0b8-47e7-bb35-91de35e97d88",
+          "job_id": "cc9c2f9c-18f5-4533-91f2-3d531d8ca627",
+          "read_steps": [
+            {
+              "stage": "S00: Input",
+              "substeps": [
+                "$1:order_date",
+                "FROM data-engineering-i1.g07_bronze.orders",
+                "WHERE and(greater_or_equal($1, '2026-07-01'), less($1, '2026-10-01'))"
+              ]
+            },
+            {
+              "stage": "S01: Output",
+              "substeps": [
+                "$20, $40",
+                "FROM __stage00_output"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_bronze.orders"
+          ],
           "rows_returned": 3,
           "sql": "SELECT SUBSTR(order_date, 1, 7) AS month, COUNT(*) AS orders\nFROM `data-engineering-i1.g07_bronze.orders`\nWHERE order_date >= '2026-07-01' AND order_date < '2026-10-01'\nGROUP BY 1",
           "status": "ran",
@@ -109,7 +273,20 @@
           "bytes_processed": 109808,
           "cache_hit": false,
           "dry_run_bytes": 109808,
-          "job_id": "fdfb564b-1d69-4859-9016-dc3f632d036a",
+          "job_id": "44fea136-8d49-4d34-82c5-6ac7172a34ca",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$1:order_date",
+                "FROM data-engineering-i1.g07_warehouse.orders",
+                "WHERE and(greater_or_equal($1, 20635), less($1, 20727))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.orders"
+          ],
           "rows_returned": 3,
           "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, COUNT(*) AS orders\nFROM `data-engineering-i1.g07_warehouse.orders`\nWHERE order_date >= DATE '2026-07-01' AND order_date < DATE '2026-10-01'\nGROUP BY 1",
           "status": "ran",
@@ -121,7 +298,20 @@
           "bytes_processed": 741248,
           "cache_hit": false,
           "dry_run_bytes": 741248,
-          "job_id": "ffb25e7d-f138-497b-a010-cb904edbb693",
+          "job_id": "beded648-6867-4612-9ac5-c310cb62e6a7",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$1:order_id, $2:buyer_id, $3:discount_id, $4:payment_id, $5:order_date",
+                "FROM data-engineering-i1.g07_warehouse.orders",
+                "WHERE and(greater_or_equal($5, 20635), less($5, 20727))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.orders"
+          ],
           "rows_returned": 10,
           "sql": "SELECT *\nFROM `data-engineering-i1.g07_warehouse.orders`\nWHERE order_date >= DATE '2026-07-01' AND order_date < DATE '2026-10-01'\nLIMIT 10",
           "status": "ran",

@@ -7,6 +7,7 @@ CREATE MATERIALIZED VIEW IF NOT EXISTS
 PARTITION BY DATE_TRUNC(order_date, MONTH)
 CLUSTER BY p_id
 OPTIONS (enable_refresh = FALSE,
+  labels = [('group', 'g07'), ('layer', 'warehouse'), ('step', 'l04')],
   description = 'Step 4 snapshot units by product/day; business duplicates retained')
 AS
 SELECT order_date, p_id, SUM(qty) AS units

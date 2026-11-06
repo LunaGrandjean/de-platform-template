@@ -151,12 +151,13 @@ the Step 2 snapshot; the Python and main clickstream paths are separate
 external tables. Malek's Debezium implementation and live evidence are included.
 Review fixes add the MV SQL, corrected costs, fail-closed prechecks, pricing
 comparison and incident runbook. See [live validation status](docs/evidence/step4/validation-status.json)
-for outstanding BigQuery checks; a local test is not cloud deployment proof.
+for the successful 2026-11-06 cloud checks: the daily-demand MV, controlled
+clustering comparisons and deliberate maximum-bytes cap failure are verified.
 
 | Deliverable | Content |
 |---|---|
 | [Tuning and cap verification](docs/warehouse-tuning.md) | Processed-byte comparisons, aggregation ratios and reproducible live checks |
-| [Daily-demand MV](warehouse/daily-demand.sql) | Provisional product/day aggregation; deployment tracked in evidence |
+| [Daily-demand MV](warehouse/daily-demand.sql) | Deployed product/day aggregation; independently verified results and collapse ratio |
 | [Pricing decision](docs/adr/0004-warehouse-pricing.md) | Workload assumptions, capacity break-even and review thresholds |
 | [Slow-query runbook](docs/runbooks/slow-query.md) | Ordered investigation, evidence and escalation |
 | [Warehouse and costed queries](docs/warehouse.md) | Datasets, tables, reproduction commands and three queries measured in bytes and dollars |

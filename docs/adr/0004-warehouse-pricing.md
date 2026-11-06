@@ -8,8 +8,11 @@
 ## Workload and evidence
 
 The existing three native business queries process 277,004, 1,625,204 and
-109,808 bytes, respectively, with cache disabled (2026-11-05 job evidence).
-Their mean is **670,672 bytes/query**. This is a measured size, not an observed
+109,808 bytes, respectively, before MV creation, with cache disabled
+(original 2026-11-05 measurements reproduced in the 2026-11-06
+[baseline](../evidence/step4/costed-queries-before-mv.json)).
+Their mean is **670,672 bytes/query**. Smart tuning now lowers the first two
+queries further; keeping this baseline makes the planning model conservative. This is a measured size, not an observed
 production query rate. For planning, assume **20 queries/day**, 30 days/month,
 and a peak of **three concurrent interactive queries** during a group review.
 There is no continuous dashboard or measured concurrency SLA yet. Record real
@@ -85,4 +88,5 @@ now would mostly pay for unused capacity.
 - [Official BigQuery regional prices](https://cloud.google.com/bigquery/pricing)
 - [Slots and autoscaling](https://cloud.google.com/bigquery/docs/slots)
 - [Cost estimation and safeguards](https://cloud.google.com/bigquery/docs/best-practices-costs)
-- [Recorded queries](../evidence/step4/costed-queries.json)
+- [Before-MV baseline](../evidence/step4/costed-queries-before-mv.json)
+- [Current queries](../evidence/step4/costed-queries.json)

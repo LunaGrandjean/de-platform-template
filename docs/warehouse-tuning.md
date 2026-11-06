@@ -26,9 +26,9 @@ snapshot must never be summed together.
 
 ## Uncached processed-byte evidence
 
-The following are Emile's 2026-11-05 actual jobs, with
-`use_query_cache=False` and `cache_hit=false`, preserved in
-[costed-queries.json](evidence/step4/costed-queries.json). Ratios are **before /
+The following reproduce Emile's original 2026-11-05 measurements in actual
+2026-11-06 jobs **before MV creation**, with `use_query_cache=False` and
+`cache_hit=false`, preserved in [before-MV evidence](evidence/step4/costed-queries-before-mv.json). Ratios are **before /
 after**; they use processed bytes, not billed bytes. These external-to-native
 comparisons measure the combined effect of storage format, types and layout,
 not partitioning or clustering in isolation.
@@ -57,6 +57,21 @@ original popular-product job read its full estimated bytes, but it has no
 unclustered control. Live completion status is recorded in
 [validation-status.json](evidence/step4/validation-status.json).
 
+The 2026-11-06 controlled runs completed with cache off and the MV excluded
+by the extra price predicate ([SQL, job IDs and execution reads](evidence/step4/controlled-tuning.json)):
+
+| Monthly `order_lines` query | Unclustered bytes | Clustered bytes | Ratio |
+|---|---:|---:|---:|
+| Rare product `0990995119` | 5,955,136 | 2,553,892 | **2.331789?** |
+| Best seller `B085BB7B1M` | 5,955,136 | 5,955,136 | **1.0?** |
+| All products, no product predicate | 4,331,008 | 4,331,008 | **1.0?** |
+
+Clustering saved reads for the rare product. It saved nothing for the hot
+product that spans the eligible blocks, or when there is no product filter.
+The different selected columns explain why these controlled byte counts are
+larger than Q2 below. The scratch table was removed after the benchmark.
+
+
 ## Daily demand and collapse ratio
 
 The committed [MV SQL](../warehouse/daily-demand.sql) defines product/day
@@ -83,7 +98,13 @@ BigQuery can use query rewriting. Record actual MV/base processed bytes.
 refreshes it, computes both ratios in BigQuery, compares the actual August
 results to the base aggregation, and records table type, refresh status,
 job IDs and uncached measurements in `materialization.json`. The source-read
-measurement above is not proof of MV deployment. Background refresh is disabled
+measurement above is independently confirmed by the successful BigQuery run.
+The MV is now deployed as `g07_warehouse.daily_demand`; its type is
+`MATERIALIZED_VIEW`, last-refresh time and job IDs are in
+[materialization.json](evidence/step4/materialization.json). All **8,649** August
+product/day rows and their units agree with an independent base-table query.
+That check also computes `SUM(price_at_purchase)`, absent from the MV, so its
+execution plan demonstrably reads `order_lines` rather than reusing the MV. Background refresh is disabled
 for this fixed snapshot; after an intentional base-table replacement, recreate
 the dependent MV if BigQuery invalidates it, then rerun the command. Do not
 drop the shared base during normal validation. No scheduled refresh is claimed.
@@ -91,6 +112,7 @@ drop the shared base during normal validation. No scheduled refresh is claimed.
 ## Three questions and nominal costs
 
 All SQL is in [the script](../scripts/warehouse.py) and the recorded evidence.
+The following preserves the **before-MV** costs for a clean layout comparison.
 The course estimate is `bytes_processed / 2^40 * $7.50`, before allowance:
 
 | Business question | External processed bytes | Native processed bytes | Native/external ratio | External USD | Native USD |
@@ -106,6 +128,30 @@ layout benefits while the invoice may remain flat. The first 1 TiB/month is
 free at the applicable account, shared with other workloads; do not assume
 the group still has all of it. See the pricing ADR for workload assumptions,
 capacity scenarios and numerical crossover/reconsideration thresholds.
+
+
+## After MV creation: automatic rewrite is visible
+
+A fresh uncached run ([current query evidence](evidence/step4/costed-queries.json))
+shows BigQuery smart tuning automatically reading `daily_demand` for Q1 and Q2,
+even though their SQL names `order_lines`. The committed `read_steps` prove
+the physical input. Q3 continues reading `orders`.
+
+| Query | External bytes | Current native/MV bytes | Before/after ratio | Current nominal USD |
+|---|---:|---:|---:|---:|
+| Q1: units/product/day in August | 13,577,448 | 242,172 | 56.065? | 0.000001651906 |
+| Q2: rare product/month over a year | 8,879,045 | 1,419,544 | 6.255? | 0.000009683008 |
+| Q3: orders/month in Q3 | 2,671,728 | 109,808 | 24.331? | 0.000000749023 |
+
+Q1 fell from 277,004 bytes before MV creation to **242,172** bytes, a further
+12.57% reduction. Asking the base aggregation and the MV explicitly now both
+reads 242,172 bytes because the base query is rewritten. This is not a cache
+hit and must not be interpreted as an isolated 1.0? materialisation benefit.
+The independent correctness check reads 435,292 bytes because it deliberately
+adds a price aggregate; use the preserved 277,004-byte pre-MV query for the
+like-for-like performance baseline.
+
+See [Google's smart-tuning documentation](https://cloud.google.com/bigquery/docs/materialized-views-use).
 
 ## Query cap and actual failure evidence
 
@@ -124,7 +170,22 @@ query cannot produce passing evidence. The exact returned error, job ID,
 cache setting and thresholds are saved to `cost-cap.json`. Do not count the
 offline unit test's simulated exception as a live cap test.
 
-## Reproduce missing live checks
+
+
+The live probe succeeded on **2026-11-06** in the sense that BigQuery rejected
+it for the intended reason ([full error and job ID](evidence/step4/cost-cap.json)):
+
+```text
+Query exceeded limit for bytes billed: 1048576. 10485760 or higher required.
+reason: bytesBilledLimitExceeded
+```
+
+The API returned HTTP 500 for this budget rejection. The collector checks the
+limit reason/message, never treats an arbitrary 500 as success, and disables
+job retries for this intentional failure. The 10 MiB requirement is the
+billing minimum even though the dry run estimates fewer processed bytes.
+
+## Reproduce the verified live checks
 
 Use an identity with GCS object read, BigQuery Job User on the project,
 BigQuery Data Viewer on `g07_bronze` and BigQuery Data Editor on
@@ -141,4 +202,5 @@ uv run --locked python -m unittest discover -s tests -p 'test_*.py'
 controlled comparison, refreshes the three-query evidence and creates/checks
 the MV. It does **not** replace the native base tables, touch Bronze, change
 IAM, reset the CDC slot or start Docker. Commit the generated evidence and
-update the validation-status file after inspecting the real results.
+inspect the generated evidence. The command writes successful validation
+status only after every live check passes. The 2026-11-06 run is complete.

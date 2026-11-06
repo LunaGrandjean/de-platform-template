@@ -1,0 +1,117 @@
+{
+  "collapse_job_id": "26be38f2-4797-47ff-bb0a-4fa88348b1b0",
+  "collapse_sql": "WITH base AS (\n  SELECT p_id, order_date FROM `data-engineering-i1.g07_warehouse.order_lines`\n  WHERE order_date >= DATE '0001-01-01'\n), product_days AS (\n  SELECT DISTINCT p_id, order_date FROM base\n), product_months AS (\n  SELECT DISTINCT p_id, DATE_TRUNC(order_date, MONTH) AS month FROM base\n)\nSELECT (SELECT COUNT(*) FROM base) AS order_lines,\n  (SELECT COUNT(*) FROM product_days) AS product_days,\n  (SELECT COUNT(*) FROM product_months) AS product_months",
+  "counts": {
+    "daily_collapse_ratio": 1.1444866813639942,
+    "monthly_collapse_ratio": 2.474007060633035,
+    "order_lines": 408560,
+    "product_days": 356981,
+    "product_months": 165141
+  },
+  "create_job_id": "33adcc70-dc29-422f-8cf0-85f7b31a4033",
+  "enable_refresh": false,
+  "labels": {
+    "group": "g07",
+    "layer": "warehouse",
+    "step": "l04"
+  },
+  "last_refresh_time": "2026-11-06 10:45:15.351000+00:00",
+  "queries": {
+    "base": {
+      "bytes_billed": 10485760,
+      "bytes_processed": 242172,
+      "cache_hit": false,
+      "dry_run_bytes": 242172,
+      "job_id": "3bb41299-d5e5-4eb3-ad35-e65205593c01",
+      "read_steps": [
+        {
+          "stage": "S00: Output",
+          "substeps": [
+            "$10:order_date, $11:p_id, $12:units",
+            "FROM data-engineering-i1.g07_warehouse.daily_demand",
+            "WHERE and(greater_or_equal($10, 20666), less($10, 20697))"
+          ]
+        }
+      ],
+      "referenced_tables": [
+        "data-engineering-i1.g07_warehouse.order_lines",
+        "data-engineering-i1.g07_warehouse.daily_demand"
+      ],
+      "rows_returned": 8649,
+      "sql": "SELECT order_date, p_id, SUM(qty) AS units FROM `data-engineering-i1.g07_warehouse.order_lines` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01' GROUP BY 1, 2",
+      "status": "ran",
+      "usd_at_on_demand_price": 1.651906e-06,
+      "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+    },
+    "independent_base_check": {
+      "bytes_billed": 10485760,
+      "bytes_processed": 435292,
+      "cache_hit": false,
+      "dry_run_bytes": 435292,
+      "job_id": "d6fad486-7838-4350-be67-229a66e2b158",
+      "read_steps": [
+        {
+          "stage": "S00: Output",
+          "substeps": [
+            "$10:p_id, $11:qty, $12:price_at_purchase, $13:order_date",
+            "FROM data-engineering-i1.g07_warehouse.order_lines",
+            "WHERE and(greater_or_equal($13, 20666), less($13, 20697))"
+          ]
+        }
+      ],
+      "referenced_tables": [
+        "data-engineering-i1.g07_warehouse.order_lines"
+      ],
+      "rows_returned": 8649,
+      "sql": "SELECT order_date, p_id, SUM(qty) AS units, SUM(price_at_purchase) AS base_only_price_sum FROM `data-engineering-i1.g07_warehouse.order_lines` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01' GROUP BY 1, 2",
+      "status": "ran",
+      "usd_at_on_demand_price": 2.969218e-06,
+      "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+    },
+    "materialized": {
+      "bytes_billed": 10485760,
+      "bytes_processed": 242172,
+      "cache_hit": false,
+      "dry_run_bytes": 242172,
+      "job_id": "3b4ee35d-013d-42ff-b23d-43c36bbf74dc",
+      "read_steps": [
+        {
+          "stage": "S00: Output",
+          "substeps": [
+            "$10:order_date, $11:p_id, $12:units",
+            "FROM data-engineering-i1.g07_warehouse.daily_demand",
+            "WHERE and(greater_or_equal($10, 20666), less($10, 20697))"
+          ]
+        }
+      ],
+      "referenced_tables": [
+        "data-engineering-i1.g07_warehouse.order_lines",
+        "data-engineering-i1.g07_warehouse.daily_demand"
+      ],
+      "rows_returned": 8649,
+      "sql": "SELECT order_date, p_id, units FROM `data-engineering-i1.g07_warehouse.daily_demand` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01'",
+      "status": "ran",
+      "usd_at_on_demand_price": 1.651906e-06,
+      "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+    }
+  },
+  "refresh_job_id": "8bf8747e-1ad4-4f79-8f37-b43caf4cfd79",
+  "result_equality_verified": true,
+  "schema": [
+    {
+      "name": "order_date",
+      "type": "DATE"
+    },
+    {
+      "name": "p_id",
+      "type": "STRING"
+    },
+    {
+      "name": "units",
+      "type": "INTEGER"
+    }
+  ],
+  "table": "data-engineering-i1.g07_warehouse.daily_demand",
+  "table_type": "MATERIALIZED_VIEW",
+  "verified_at_utc": "2026-11-06T10:45:21.790368+00:00"
+}

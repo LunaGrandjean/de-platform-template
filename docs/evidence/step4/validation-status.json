@@ -1,27 +1,26 @@
 {
-  "checked_at_utc": "2026-11-06T10:27:58.630187+00:00",
-  "status": "pending_bigquery_data_access",
-  "project": "data-engineering-i1",
-  "location": "europe-west1",
-  "dataset_metadata_readable": true,
-  "cost_cap_verified": false,
-  "daily_materialized_view_verified": false,
-  "controlled_tuning_measured": false,
-  "three_queries_remeasured": false,
-  "actual_error": "403 Access Denied: Table data-engineering-i1:g07_warehouse.order_lines: User does not have permission to query table data-engineering-i1:g07_warehouse.order_lines, or perhaps it does not exist.",
-  "datasets_and_tables_confirmed_to_exist": true,
-  "required_access": {
-    "g07_bronze": "roles/bigquery.dataViewer",
-    "g07_warehouse": "roles/bigquery.dataEditor",
-    "project": "roles/bigquery.jobUser"
-  },
-  "next_command": "uv run --locked scripts/warehouse.py complete",
-  "completed_independently": [
-    "Malek Step 3 merge and conflict resolution",
-    "warehouse safety/cost fixes",
-    "offline regression tests",
-    "GCS snapshot collapse measurement",
-    "pricing ADR and slow-query runbook"
+  "controlled_tuning_measured": true,
+  "cost_cap_verified": true,
+  "daily_materialized_view_verified": true,
+  "evidence": [
+    "cost-cap.json",
+    "controlled-tuning.json",
+    "costed-queries.json",
+    "materialization.json"
   ],
-  "note": "No fake MV, cap or controlled benchmark evidence is committed. complete overwrites this status only after every live check succeeds."
+  "location": "europe-west1",
+  "prechecks": {
+    "duplicate_order_ids": 0,
+    "orphan_lines": 0,
+    "unparsed_dates": 0,
+    "unparsed_order_ids": 0,
+    "unparsed_prices": 0,
+    "unparsed_qty": 0
+  },
+  "project": "data-engineering-i1",
+  "scope": "Existing snapshot warehouse only; no Docker rerun, Bronze write or source/IAM change",
+  "status": "live_step4_checks_passed",
+  "three_queries_remeasured": true,
+  "verified_at_utc": "2026-11-06T10:45:21.792376+00:00",
+  "warehouse_script_sha256": "e10627b9b2094eb1cdb1df95f021b1f55dd82ce4a7ae5e09d72344fc2df61b3b"
 }

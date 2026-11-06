@@ -1,0 +1,17 @@
+{
+  "actual_error": "500 Query exceeded limit for bytes billed: 1048576. 10485760 or higher required.; reason: bytesBilledLimitExceeded, message: Query exceeded limit for bytes billed: 1048576. 10485760 or higher required.\n\nLocation: europe-west1\nJob ID: 841b644c-a2e0-4864-bcfc-e291035f3847\n",
+  "dry_run_bytes_processed": 3314892,
+  "error_details": [
+    {
+      "message": "Query exceeded limit for bytes billed: 1048576. 10485760 or higher required.",
+      "reason": "bytesBilledLimitExceeded"
+    }
+  ],
+  "job_id": "841b644c-a2e0-4864-bcfc-e291035f3847",
+  "normal_maximum_bytes_billed": 1000000000,
+  "probe_maximum_bytes_billed": 1048576,
+  "sql": "SELECT p_id, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\nGROUP BY p_id",
+  "status": "rejected_by_cost_cap",
+  "use_query_cache": false,
+  "verified_at_utc": "2026-11-06T10:45:00.864989+00:00"
+}

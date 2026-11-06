@@ -1,0 +1,176 @@
+{
+  "build_job_id": "63e7db7d-b319-435d-a633-5c1fa868e2b6",
+  "change": "same typed rows, monthly partitions and price predicate; only p_id clustering differs",
+  "queries": {
+    "best": {
+      "before_over_after_ratio": 1.0,
+      "product_id": "B085BB7B1M",
+      "variants": {
+        "after_clustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 5955136,
+          "cache_hit": false,
+          "dry_run_bytes": 5955136,
+          "job_id": "d0fae1e2-9f41-44e9-86e8-e27e01312ad1",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$11:qty, $13:order_date, $10:p_id, $12:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse.order_lines",
+                "WHERE and(greater_or_equal($13, 20332), less($13, 20697), equal($10, 'B085BB7B1M'), greater_or_equal($12, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines"
+          ],
+          "rows_returned": 12,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n  AND p_id = 'B085BB7B1M' AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 4.0621235e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        },
+        "before_unclustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 5955136,
+          "cache_hit": false,
+          "dry_run_bytes": 5955136,
+          "job_id": "2a7fe931-56d0-4b10-b70d-49f9f2ce2ab6",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$2:qty, $4:order_date, $1:p_id, $3:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb",
+                "WHERE and(greater_or_equal($4, 20332), less($4, 20697), equal($1, 'B085BB7B1M'), greater_or_equal($3, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb"
+          ],
+          "rows_returned": 12,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n  AND p_id = 'B085BB7B1M' AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 4.0621235e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        }
+      }
+    },
+    "no_product_filter": {
+      "before_over_after_ratio": 1.0,
+      "product_id": null,
+      "variants": {
+        "after_clustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 4331008,
+          "cache_hit": false,
+          "dry_run_bytes": 4331008,
+          "job_id": "43087a10-066c-4fb6-9285-ae1e2e6c957e",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$10:qty, $12:order_date, $11:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse.order_lines",
+                "WHERE and(greater_or_equal($12, 20332), less($12, 20697), greater_or_equal($11, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines"
+          ],
+          "rows_returned": 12,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n   AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 2.9542716e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        },
+        "before_unclustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 4331008,
+          "cache_hit": false,
+          "dry_run_bytes": 4331008,
+          "job_id": "8f84029f-4010-4c53-8c6e-373c3e70f669",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$1:qty, $3:order_date, $2:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb",
+                "WHERE and(greater_or_equal($3, 20332), less($3, 20697), greater_or_equal($2, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb"
+          ],
+          "rows_returned": 12,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n   AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 2.9542716e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        }
+      }
+    },
+    "rare": {
+      "before_over_after_ratio": 2.3317885016281035,
+      "product_id": "0990995119",
+      "variants": {
+        "after_clustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 2553892,
+          "cache_hit": false,
+          "dry_run_bytes": 2553892,
+          "job_id": "ce14244f-0431-4593-a50d-85e2381699d8",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$11:qty, $13:order_date, $10:p_id, $12:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse.order_lines",
+                "WHERE and(greater_or_equal($13, 20332), less($13, 20697), equal($10, '0990995119'), greater_or_equal($12, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse.order_lines"
+          ],
+          "rows_returned": 1,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse.order_lines`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n  AND p_id = '0990995119' AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 1.7420634e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        },
+        "before_unclustered": {
+          "bytes_billed": 10485760,
+          "bytes_processed": 5955136,
+          "cache_hit": false,
+          "dry_run_bytes": 5955136,
+          "job_id": "7a26e708-bdcf-4e83-86fe-0f44b3209303",
+          "read_steps": [
+            {
+              "stage": "S00: Output",
+              "substeps": [
+                "$2:qty, $4:order_date, $1:p_id, $3:price_at_purchase",
+                "FROM data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb",
+                "WHERE and(greater_or_equal($4, 20332), less($4, 20697), equal($1, '0990995119'), greater_or_equal($3, NUMERIC<...>))"
+              ]
+            }
+          ],
+          "referenced_tables": [
+            "data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb"
+          ],
+          "rows_returned": 1,
+          "sql": "SELECT DATE_TRUNC(order_date, MONTH) AS month, SUM(qty) AS units\nFROM `data-engineering-i1.g07_warehouse._step4_unclustered_77ef9f6abddb`\nWHERE order_date >= DATE '2025-09-01' AND order_date < DATE '2026-09-01'\n  AND p_id = '0990995119' AND price_at_purchase >= 0\nGROUP BY 1",
+          "status": "ran",
+          "usd_at_on_demand_price": 4.0621235e-05,
+          "usd_from_billed_bytes_before_allowance": 7.1525574e-05
+        }
+      }
+    }
+  },
+  "use_query_cache": false,
+  "verified_at_utc": "2026-11-06T10:45:06.465874+00:00"
+}

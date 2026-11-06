@@ -2,7 +2,10 @@
 
 See [warehouse tuning](warehouse-tuning.md) for the completed review changes,
 MV trade-off, processed-byte costs, live-check commands and current status.
-The tables below preserve Emile's original 2026-11-05 measurements.
+The tables below preserve Emile's original measurements, reproduced on
+2026-11-06 before MV creation ([baseline](evidence/step4/costed-queries-before-mv.json)).
+The MV is now deployed and checked; see the tuning document for current smart
+rewrite results, controlled clustering (including 1.0x outcomes), and cap proof.
 
 ## What exists
 
@@ -68,7 +71,7 @@ bucket. Every query runs with `maximum_bytes_billed` = 1 GB.
 
 Measured on 2026-11-05 with the query cache off. Bytes are what BigQuery
 reported as processed; the full SQL, job IDs, dry-run bytes and billed bytes are
-in [costed-queries.json](evidence/step4/costed-queries.json). Dollars use the
+in [before-MV queries](evidence/step4/costed-queries-before-mv.json). Dollars use the
 on-demand price of $7.50 per TiB. The corrected course estimate uses
 **processed** bytes; billed-byte cost remains separate. See the three
 question/cost table in [warehouse tuning](warehouse-tuning.md).

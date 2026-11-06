@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
-from google.api_core.exceptions import BadRequest, Forbidden
+from google.api_core.exceptions import BadRequest, Forbidden, InternalServerError
 from scripts import warehouse
 
 
@@ -35,7 +35,7 @@ class WarehouseTests(unittest.TestCase):
     def test_processed_and_billed_costs_remain_distinct(self):
         client = Mock()
         job = SimpleNamespace(result=lambda: [], job_id="offline-only", total_bytes_processed=277004,
-                              total_bytes_billed=10485760, cache_hit=False, to_api_repr=lambda: {})
+                              total_bytes_billed=10485760, cache_hit=False, referenced_tables=[], query_plan=[])
         client.query.side_effect = [SimpleNamespace(total_bytes_processed=277004), job]
         result = warehouse.measure_one(client, "SELECT 1")
         self.assertAlmostEqual(result["usd_at_on_demand_price"], 0.0000018895, places=10)
@@ -85,6 +85,15 @@ class WarehouseTests(unittest.TestCase):
         with patch.object(warehouse, "write_json") as write, self.assertRaises(ValueError):
             warehouse.verify_cap(client)
         write.assert_not_called()
+
+    def test_http_500_with_real_budget_reason_is_valid_cap_evidence(self):
+        client = Mock()
+        error = InternalServerError("Query exceeded limit for bytes billed: 1048576. 10485760 or higher required.",
+                                    errors=[{"reason": "bytesBilledLimitExceeded"}])
+        client.query.side_effect = [SimpleNamespace(total_bytes_processed=3_000_000), error]
+        with patch.object(warehouse, "write_json") as write:
+            warehouse.verify_cap(client)
+        self.assertEqual(write.call_args.args[1]["error_details"][0]["reason"], "bytesBilledLimitExceeded")
 
     def test_completion_status_is_not_written_if_live_materialization_fails(self):
         client = Mock()

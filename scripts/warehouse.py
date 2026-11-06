@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from google.cloud import bigquery
-from google.api_core.exceptions import BadRequest, Forbidden
+from google.api_core.exceptions import BadRequest, GoogleAPICallError
 
 PROJECT = "data-engineering-i1"
 LOCATION = "europe-west1"
@@ -348,7 +348,9 @@ def measure_one(client: bigquery.Client, sql: str) -> dict:
             "bytes_processed": job.total_bytes_processed,
             "bytes_billed": job.total_bytes_billed,
             "cache_hit": job.cache_hit,
-            "materialized_view_statistics": job.to_api_repr().get("statistics", {}).get("query", {}).get("materializedViewStatistics"),
+            "referenced_tables": [str(table) for table in (job.referenced_tables or [])],
+            "read_steps": [{"stage": stage.name, "substeps": step.substeps}
+                           for stage in job.query_plan for step in stage.steps if step.kind == "READ"],
             "usd_at_on_demand_price": processed_cost(job.total_bytes_processed),
             "usd_from_billed_bytes_before_allowance": processed_cost(job.total_bytes_billed),
         })
@@ -392,11 +394,17 @@ def materialize(client: bigquery.Client) -> None:
                            job_config=config)
     refresh.result()
     collapse_sql = f"""
-SELECT COUNT(*) AS order_lines,
-  COUNT(DISTINCT STRUCT(p_id, order_date)) AS product_days,
-  COUNT(DISTINCT STRUCT(p_id, DATE_TRUNC(order_date, MONTH))) AS product_months
-FROM `{names['wh']}.order_lines`
-WHERE order_date >= DATE '0001-01-01'
+WITH base AS (
+  SELECT p_id, order_date FROM `{names['wh']}.order_lines`
+  WHERE order_date >= DATE '0001-01-01'
+), product_days AS (
+  SELECT DISTINCT p_id, order_date FROM base
+), product_months AS (
+  SELECT DISTINCT p_id, DATE_TRUNC(order_date, MONTH) AS month FROM base
+)
+SELECT (SELECT COUNT(*) FROM base) AS order_lines,
+  (SELECT COUNT(*) FROM product_days) AS product_days,
+  (SELECT COUNT(*) FROM product_months) AS product_months
 """
     job = client.query(collapse_sql, job_config=config)
     counts = dict(next(iter(job.result())))
@@ -406,11 +414,16 @@ WHERE order_date >= DATE '0001-01-01'
     variants = {
         "base": f"SELECT order_date, p_id, SUM(qty) AS units FROM `{names['wh']}.order_lines` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01' GROUP BY 1, 2",
         "materialized": f"SELECT order_date, p_id, units FROM `{names['wh']}.daily_demand` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01'",
+        # The extra aggregate is absent from the MV, so BigQuery must read
+        # base rows. Compare its first three columns to the MV to avoid
+        # accidentally proving equivalence by reading the MV twice.
+        "independent_base_check": f"SELECT order_date, p_id, SUM(qty) AS units, SUM(price_at_purchase) AS base_only_price_sum FROM `{names['wh']}.order_lines` WHERE order_date >= DATE '2026-08-01' AND order_date < DATE '2026-09-01' GROUP BY 1, 2",
     }
     measured = {name: measure_one(client, query) for name, query in variants.items()}
     # Compare actual results too; a count alone would miss changed totals.
-    rows = [sorted(tuple(row) for row in client.query(query, job_config=config).result())
-            for query in variants.values()]
+    rows = [sorted((row.order_date, row.p_id, row.units)
+                   for row in client.query(variants[name], job_config=config).result())
+            for name in ["independent_base_check", "materialized"]]
     if rows[0] != rows[1]:
         raise ValueError("Daily-demand MV results do not match the base aggregation")
     table = client.get_table(f"{names['wh']}.daily_demand")
@@ -438,10 +451,14 @@ GROUP BY p_id"""
     job = None
     try:
         job = client.query(sql, job_config=bigquery.QueryJobConfig(
-            use_query_cache=False, maximum_bytes_billed=threshold))
-        job.result()
-    except (BadRequest, Forbidden) as error:
-        if not any(term in str(error).lower() for term in ["maximum bytes billed", "bytes billed limit", "limit for bytes billed", "billing tier"]):
+            use_query_cache=False, maximum_bytes_billed=threshold), job_retry=None)
+        job.result(job_retry=None)
+    except GoogleAPICallError as error:
+        # The API can return this expected budget rejection as HTTP 500;
+        # identify the actual limit reason, never HTTP status alone.
+        reasons = {detail.get("reason") for detail in (error.errors or [])}
+        if "bytesBilledLimitExceeded" not in reasons and not any(
+                term in str(error).lower() for term in ["maximum bytes billed", "bytes billed limit", "limit for bytes billed"]):
             raise
         write_json(EVIDENCE_DIR / "cost-cap.json", {
             "verified_at_utc": datetime.now(timezone.utc).isoformat(),

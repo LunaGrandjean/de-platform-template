@@ -239,6 +239,21 @@ of the two sales tables; no row is removed or deduplicated
 Before the build, 0 values failed these casts and 0 order lines lacked a parent
 order; the checks are in `docs/evidence/step4/native-tables.json`.
 
+## Step 4: provisional daily-demand materialised view
+
+`g07_warehouse.daily_demand` is deployed and verified on 2026-11-06. It has
+one row per product/day in the pinned snapshot (356,981 rows before any date
+filter), monthly partitions and product clustering. It is a performance
+aggregate; country mapping and business-duplicate reconciliation remain Lesson 5.
+
+| Column | BigQuery type | Meaning | Personal data? |
+|---|---|---|---|
+| `order_date` | DATE | Parent order day; aggregate grain and monthly partition source | No direct identifier; aggregate purchase attribute |
+| `p_id` | STRING | Product ID; aggregate grain and clustering column | No |
+| `units` | INT64 | `SUM(qty)` for that product/day; business duplicates retained | No direct identifier; aggregate purchase attribute |
+
+See [DDL](../warehouse/daily-demand.sql) and [live MV/correctness evidence](evidence/step4/materialization.json).
+
 ## References
 
 - [Baseline schema](../db/migrations/20260915120000_baseline.sql)

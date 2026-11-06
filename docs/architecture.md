@@ -59,7 +59,7 @@ flowchart LR
         dlq[(GCS bronze/_dlq/: rejected events)]
         ext[(BigQuery g07_bronze: snapshot and selected live external tables)]
         raw[(BigQuery g07_warehouse: native orders and order_lines)]
-        mv[(Daily-demand MV: SQL prepared, live verification pending)]
+        mv[(Daily-demand MV: verified 2026-11-06)]
         silver[(BigQuery Silver: curated records - Lesson 5)]
         gold[(BigQuery Gold: daily-demand star - Lesson 5)]
     end
@@ -77,7 +77,7 @@ flowchart LR
     cdc_sink -->|raw envelopes + Kafka provenance| bronze
     bronze -->|Pinned snapshot and separate live prefixes| ext
     ext -->|Typed snapshot only| raw
-    raw -.->|Group by product and day, pending live validation| mv
+    raw -->|Group by product and day, verified| mv
     raw -.->|Type, reconcile and check| silver
     silver -.->|Aggregate shared measures| gold
     gold -.-> reports[Analysts / business reports]
@@ -93,7 +93,7 @@ units.
 
 ## Layers
 
-| Component | Current status: 2026-11-05 | Next verification |
+| Component | Recorded status (timestamps retained per evidence) | Next verification |
 |---|---|---|
 | PostgreSQL and Kafka | Live source connections verified; Compose services and CDC topics active for the Step 3 run | Keep the shared source and broker available; check connector, sink lag and retained WAL before operating |
 | Shared Bronze bucket | Verified `gs://data-engineering-i1-marketplace-group`, `europe-west1`, Standard; Step 3 objects written with operator ADC; public access prevention enforced, uniform access enabled | Each team member must authenticate with their own Google identity and verify bucket access; audit inherited permissions |
@@ -105,6 +105,7 @@ units.
 | PostgreSQL CDC | Debezium snapshot completed; connector/task RUNNING on existing seven-table publication and `pgoutput` slot; 746 GCS objects observed, all 21 Kafka partitions caught up, and slot retained 130,600 WAL bytes at 16:20 UTC | Snapshot overlaps earlier snapshot/backfill; TRUNCATE requires a coordinated full snapshot/reset; at-least-once GCS delivery. See [CDC evidence](evidence/step3/cdc-status.json) |
 | BigQuery external Bronze tables | Seven pinned snapshot tables and Python orders / main clickstream external tables; [evidence](evidence/step4/external-tables-step3.json) | CDC stays raw in GCS until envelope reconciliation is implemented |
 | Native BigQuery working tables | `g07_warehouse.orders` and `order_lines`, monthly partitions; order_lines clustered by product; snapshot only | See [warehouse tuning](warehouse-tuning.md) for measurements, materialisation and cost cap |
+| Daily-demand materialised view | Verified 2026-11-06: `g07_warehouse.daily_demand`; collapse 1.144487?; independent August result equality; capped uncached jobs | Background refresh disabled for the fixed snapshot; repeat validation after a coordinated rebuild |
 | Silver and Gold | Model design only | Lesson 5: implement and test business transformations |
 
 ## Bronze, Silver and Gold contracts
